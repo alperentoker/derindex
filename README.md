@@ -36,7 +36,7 @@ Harici hiçbir bulut servisine, üçüncü parti API'lara veya harici sunuculara
          ┌───────────────────────┼───────────────────────┐
          ▼                       ▼                       ▼
     Ters İndeks            Okapi BM25            Yerel Vektörler
- (Inverted Index)       (k1=1.5, b=0.75)    (Sentence-Transformers)
+ (Inverted Index)       (k1=1.5, b=0.75)        (Dense Vectors)
   (SQLite Tabloları)      (TF/DF/avgdl)       (L2 Normalizasyonu)
          └───────────────────────┬───────────────────────┘
                                  │
@@ -67,7 +67,7 @@ Harici hiçbir bulut servisine, üçüncü parti API'lara veya harici sunuculara
    - **TF-IDF & Cosine Similarity**: Vektör uzayı hesaplayıcısı.
 
 2. **Yerel Semantik Arama**:
-   - `sentence-transformers` (`all-MiniLM-L6-v2`) yerel embedding modeli.
+   - Hafif yerel dense vektör embedding motoru (384-boyutlu L2 normalize vektör uzayı).
    - NumPy tabanlı yüksek performanslı vektör deposu (100.000+ parça üzerinde <10ms arama süresi).
    - Min-Max skor normalizasyonu ile BM25 ve Vektör benzerliğini birleştiren **Hibrit Skorlama**:
      $$\text{final\_score} = \alpha \cdot \text{bm25\_score} + (1 - \alpha) \cdot \text{semantic\_score}$$

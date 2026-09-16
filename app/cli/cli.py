@@ -187,7 +187,7 @@ def cmd_status(args):
 
     table.add_row("SQLite Veritabanı", "[green]Çalışıyor[/green]", f"{st['total_documents']} belge, {config.DB_PATH.name}")
     table.add_row("Vektör Deposu", "[green]Hazır[/green]", f"{config.VECTORS_PATH.name}")
-    table.add_row("Embedding Modeli", "[green]Hazır[/green]", config.EMBEDDING_MODEL_NAME)
+    table.add_row("Semantik İndeks", "[green]Hazır[/green]", "Dense Vector Index")
 
     console.print(table)
 

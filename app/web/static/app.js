@@ -13,9 +13,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Global shortcut: press '/' to focus search input
+  // Global shortcut: press '/' to focus search input (only when not in an input/textarea)
   document.addEventListener('keydown', (e) => {
-    if (e.key === '/' && document.activeElement !== searchInput) {
+    const isInputActive = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+    if (e.key === '/' && !isInputActive) {
       e.preventDefault();
       switchTab('search');
       searchInput.focus();
@@ -208,9 +209,6 @@ async function loadSystemStats() {
     document.getElementById('stat-chunks').textContent = data.stats.total_chunks.toLocaleString();
     document.getElementById('stat-terms').textContent = data.stats.total_unique_terms.toLocaleString();
     document.getElementById('stat-symbols').textContent = data.stats.total_symbols.toLocaleString();
-
-    const statusLabel = document.getElementById('status-label');
-    statusLabel.textContent = `Arama Motoru Hazır (${data.engine.embedding_model})`;
   } catch (err) {
     console.warn('Could not fetch stats:', err);
   }

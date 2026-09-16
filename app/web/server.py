@@ -100,13 +100,7 @@ def api_symbol_search(
 def api_stats():
     """System and index statistics."""
     st = db.get_stats()
-    return {
-        "stats": st,
-        "engine": {
-            "status": "ready",
-            "embedding_model": config.EMBEDDING_MODEL_NAME
-        }
-    }
+    return {"stats": st}
 
 
 @app.post("/api/index")
