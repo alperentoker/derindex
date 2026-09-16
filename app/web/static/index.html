@@ -7,7 +7,7 @@
   <meta name="description" content="Derindex: Tamamen lokal çalışan, derinlemesine kişisel arama motoru ve semantik arama sistemi.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -16,29 +16,29 @@
     <header class="navbar">
       <div class="brand">
         <div class="brand-logo">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             <polygon points="11 8 13 12 9 12 11 8" fill="currentColor"></polygon>
           </svg>
         </div>
         <div class="brand-text">
-          <h1>Derindex</h1>
-          <span class="badge-tag">Offline & Private</span>
+          <span class="brand-name">Derindex</span>
+          <span class="badge-tag">Offline IR & Neural</span>
         </div>
       </div>
 
       <!-- Navigation Tabs -->
       <nav class="nav-tabs" role="tablist">
         <button id="tab-btn-search" class="tab-btn active" role="tab" aria-selected="true" onclick="switchTab('search')">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
           Search Engine
         </button>
         <button id="tab-btn-status" class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('status')">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
             <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
             <line x1="6" y1="6" x2="6.01" y2="6"></line>
@@ -55,8 +55,8 @@
       <!-- TAB 1: SEARCH ENGINE -->
       <section id="view-search" class="tab-view active">
         <div class="search-hero">
-          <h2 class="hero-title">Kişisel Belgelerinizde <span class="gradient-text">Akıllı Arama</span></h2>
-          <p class="hero-subtitle">Okapi BM25 ve Vektör Semantik Aramayı Birleştiren Yüksek Performanslı Yerel Motor</p>
+          <h1 class="hero-title">Kişisel Belgelerinizde Akıllı Arama</h1>
+          <p class="hero-subtitle">Okapi BM25 ters indeks ve yerel vektör semantik arama ile milisaniyeler içinde doğrudan satır ve sembol eşleşmesi.</p>
           
           <div class="search-box-card">
             <div class="search-input-wrapper">
