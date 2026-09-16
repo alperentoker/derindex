@@ -64,3 +64,15 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Sensitive files & Secrets
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+credentials*
+id_rsa*
+id_ed25519*
+known_hosts

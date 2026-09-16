@@ -1,3 +1,11 @@
+<p align="center">
+  <img src="assets/banner.jpeg" alt="Derindex Banner" width="100%">
+</p>
+
+<p align="center">
+  <img src="assets/logo.jpeg" alt="Derindex Logo" width="80" height="80" style="border-radius: 8px;">
+</p>
+
 # Derindex: Derinlemesine Kişisel Arama Motoru ve Semantik Arama
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
@@ -13,6 +21,10 @@ Harici hiçbir bulut servisine, üçüncü parti API'lara veya harici sunuculara
 ---
 
 ## 🏗 Mimari Şema
+
+<p align="center">
+  <img src="assets/architecture.jpeg" alt="Derindex Teknik Mimari Şeması" width="100%" style="border-radius: 8px;">
+</p>
 
 ```
                         Linux Dosya Sistemi
@@ -89,6 +101,10 @@ Harici hiçbir bulut servisine, üçüncü parti API'lara veya harici sunuculara
    - Sıfır bulut bağımlılığı, verileriniz asla bilgisayarınızdan dışarı çıkmaz.
    - Arka planda çalışırken yalnızca **~60 MB RAM** tüketir.
 
+<p align="center">
+  <img src="assets/privacy_concept.jpeg" alt="Sıfır Bulut Bağımlılığı ve Yerel Gizlilik" width="100%" style="border-radius: 8px;">
+</p>
+
 ---
 
 ## 🚀 Hızlı Kurulum
@@ -122,6 +138,10 @@ ln -sf $(pwd)/derindex ~/.local/bin/derindex
 ---
 
 ## 💻 CLI Kullanım Rehberi
+
+<p align="center">
+  <img src="assets/terminal_cli.jpeg" alt="Derindex CLI Terminal Arayüzü" width="100%" style="border-radius: 8px;">
+</p>
 
 Terminalinizde herhangi bir klasördeyken doğrudan `derindex` komutunu kullanabilirsiniz:
 
@@ -159,7 +179,7 @@ derindex serve --port 8000
 
 ## 🌐 Web Arayüzü
 
-Web arayüzü modern, karanlık mod (dark theme) ve glassmorphic estetik ile tasarlanmıştır.
+Web arayüzü **Linear ve Vercel** tasarım standartlarında; nötr zinc/slate renk paleti, katı 8px grid sistemi, tek vurgulu mavi aksan ve minimalist kurumsal estetik ile tasarlanmıştır.
 
 ```bash
 derindex serve --port 8000
@@ -210,6 +230,7 @@ python3 -m unittest discover tests -v
 
 ```
 derindex/
+├── assets/             # Kurumsal logo, banner, mimari ve CLI görsel varlıkları
 ├── app/
 │   ├── cli/            # CLI komut satırı arayüzü (argparse, rich tablolar)
 │   ├── crawler/        # Dizin tarayıcısı ve watchdog gerçek zamanlı izleyici
