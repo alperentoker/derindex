@@ -300,6 +300,84 @@ port = 5432
         self.assertTrue(any("localhost" in c.text for c in parsed_toml.chunks))
 
 
+class TestMediaAndUniversalParsers(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_audio_metadata_parsing(self):
+        from app.parsers.media_parser import MediaParser
+        parser = MediaParser()
+        audio_file = self.root / "rock_duman_haberin_yok.mp3"
+        audio_file.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00" + b"\x00" * 100)
+
+        parsed = parser.parse(audio_file)
+        self.assertEqual(parsed.filename, "rock_duman_haberin_yok.mp3")
+        self.assertGreater(len(parsed.chunks), 0)
+        chunk_text = parsed.chunks[0].text
+        self.assertIn("duman", chunk_text.lower())
+        self.assertIn("haberin", chunk_text.lower())
+
+    def test_video_and_companion_subtitles(self):
+        from app.parsers.media_parser import MediaParser
+        parser = MediaParser()
+
+        # Create dummy video file
+        vid_file = self.root / "linux_kernel_lecture.mp4"
+        vid_file.write_bytes(b"\x00" * 50)
+
+        # Create matching companion subtitle file
+        sub_file = self.root / "linux_kernel_lecture.srt"
+        sub_file.write_text("""1
+00:00:05,000 --> 00:00:10,000
+Bugun sanal bellek ve page table mimarisini inceliyoruz.
+
+2
+00:00:11,000 --> 00:00:16,000
+Translation Lookaside Buffer erisim surelerini kisaltir.
+""", encoding="utf-8")
+
+        parsed = parser.parse(vid_file)
+        self.assertGreaterEqual(len(parsed.chunks), 2)
+        all_text = " ".join(c.text for c in parsed.chunks)
+        self.assertIn("sanal bellek", all_text)
+        self.assertIn("Translation Lookaside Buffer", all_text)
+
+    def test_archive_toc_extraction(self):
+        from app.parsers.archive_parser import ArchiveParser
+        parser = ArchiveParser()
+
+        zip_file = self.root / "source_backup.zip"
+        import zipfile
+        with zipfile.ZipFile(zip_file, "w") as z:
+            z.writestr("backend/api/server.py", "print('hello')")
+            z.writestr("frontend/src/index.html", "<h1>App</h1>")
+            z.writestr("database/schema.sql", "CREATE TABLE users;")
+
+        parsed = parser.parse(zip_file)
+        self.assertGreater(len(parsed.chunks), 0)
+        chunk_text = parsed.chunks[0].text
+        self.assertIn("backend/api/server.py", chunk_text)
+        self.assertIn("database/schema.sql", chunk_text)
+
+    def test_universal_fallback_arbitrary_file(self):
+        from app.parsers import get_parser_for_file
+        blend_file = self.root / "karakter_animasyon_robot.blend"
+        blend_file.write_bytes(b"BLENDER_V300" + b"\x00" * 100)
+
+        parser = get_parser_for_file(blend_file)
+        self.assertIsNotNone(parser)
+        parsed = parser.parse(blend_file)
+        self.assertGreater(len(parsed.chunks), 0)
+        chunk_text = parsed.chunks[0].text
+        self.assertIn("Blender", chunk_text)
+        self.assertIn("karakter", chunk_text.lower())
+        self.assertIn("animasyon", chunk_text.lower())
+
+
 if __name__ == "__main__":
     unittest.main()
 

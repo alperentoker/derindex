@@ -79,7 +79,46 @@ class Config:
         ".svg",
         ".bmp",
         ".tiff",
+        # Video & Media
+        ".mp4",
+        ".mkv",
+        ".avi",
+        ".mov",
+        ".webm",
+        ".flv",
+        ".wmv",
+        ".m4v",
+        # Audio & Music
+        ".mp3",
+        ".wav",
+        ".flac",
+        ".ogg",
+        ".m4a",
+        ".aac",
+        ".opus",
+        ".wma",
+        # Subtitles & Captions
+        ".srt",
+        ".vtt",
+        ".sub",
+        ".ass",
+        # Archives & Packages
+        ".zip",
+        ".tar",
+        ".gz",
+        ".tgz",
+        ".bz2",
+        ".xz",
+        ".7z",
+        ".rar",
+        # E-Books
+        ".epub",
+        ".mobi",
+        ".fb2",
     })
+
+    # Enable universal fallback indexing for all non-ignored files
+    ENABLE_UNIVERSAL_FALLBACK: bool = True
 
     # Sensitive/Ignored Directories (Security & Privacy)
     IGNORED_DIRS: Set[str] = field(default_factory=lambda: {

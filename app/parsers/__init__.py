@@ -1,4 +1,4 @@
-"""Unified parser registry for all supported document formats."""
+"""Unified parser registry for all supported document and media formats."""
 
 from pathlib import Path
 from typing import Optional, List
@@ -11,6 +11,9 @@ from .code_parser import CodeParser
 from .text_parser import TextParser
 from .office_parser import OfficeParser
 from .image_parser import ImageParser
+from .media_parser import MediaParser
+from .archive_parser import ArchiveParser
+from .universal_parser import UniversalFallbackParser
 
 _PARSERS: List[BaseParser] = [
     PDFParser(),
@@ -18,16 +21,21 @@ _PARSERS: List[BaseParser] = [
     HTMLParserImpl(),
     OfficeParser(),
     ImageParser(),
+    MediaParser(),
+    ArchiveParser(),
     CodeParser(),
     TextParser(),
 ]
+
+_UNIVERSAL_FALLBACK = UniversalFallbackParser()
 
 
 def get_parser_for_file(file_path: Path) -> Optional[BaseParser]:
     for p in _PARSERS:
         if p.can_parse(file_path):
             return p
-    return None
+    # Universal fallback for any arbitrary file
+    return _UNIVERSAL_FALLBACK
 
 
 __all__ = [
@@ -42,5 +50,8 @@ __all__ = [
     "TextParser",
     "OfficeParser",
     "ImageParser",
+    "MediaParser",
+    "ArchiveParser",
+    "UniversalFallbackParser",
     "get_parser_for_file",
 ]

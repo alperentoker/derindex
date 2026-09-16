@@ -52,9 +52,10 @@ class Crawler:
             if pattern in name_lower:
                 return False
 
-        # Check extension
-        if file_path.suffix.lower() not in config.SUPPORTED_EXTENSIONS:
-            return False
+        # Check extension (if universal fallback is disabled)
+        if not getattr(config, "ENABLE_UNIVERSAL_FALLBACK", False):
+            if file_path.suffix.lower() not in config.SUPPORTED_EXTENSIONS:
+                return False
 
         # Check file existence and size
         try:

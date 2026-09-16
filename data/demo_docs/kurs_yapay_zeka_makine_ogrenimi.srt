@@ -1,0 +1,7 @@
+1
+00:00:01,000 --> 00:00:08,000
+Bu egitim videosunda konvolusyonel sinir aglari ve derin ogrenme mimarilerini anlatiyoruz.
+
+2
+00:00:09,000 --> 00:00:15,000
+Goruntu isleme ve otonom arac kamera analizinde filtre katmanlari kullanilir.
