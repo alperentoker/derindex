@@ -51,6 +51,14 @@ def serve_index():
     return FileResponse(index_file)
 
 
+@app.api_route("/favicon.ico", methods=["GET", "HEAD"])
+def serve_favicon():
+    favicon_file = STATIC_DIR / "favicon.ico"
+    if not favicon_file.exists():
+        raise HTTPException(status_code=404, detail="Favicon not found")
+    return FileResponse(favicon_file, media_type="image/x-icon")
+
+
 @app.get("/api/search")
 def api_search(
     q: str = Query(..., min_length=1),
