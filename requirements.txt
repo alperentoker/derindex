@@ -1,0 +1,12 @@
+numpy>=1.26.0
+fastapi>=0.110.0
+uvicorn>=0.28.0
+pypdf>=4.0.0
+watchdog>=4.0.0
+pyyaml>=6.0.1
+rich>=13.7.0
+requests>=2.31.0
+torch>=2.2.0
+transformers>=4.40.0
+sentence-transformers>=2.7.0
+scikit-learn>=1.4.0

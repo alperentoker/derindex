@@ -1,0 +1,23 @@
+# Derindex systemd user service template
+# Note: Use scripts/install_service.sh to automatically install and configure paths for your system.
+
+[Unit]
+Description=Derindex Personal Search Engine & Semantic Search Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/derindex
+ExecStart=%h/derindex/derindex daemon --watch %h/Belgeler --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+
+# Resource limits to protect laptop memory
+MemoryMax=1.5G
+MemoryHigh=1G
+
+[Install]
+WantedBy=default.target

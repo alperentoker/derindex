@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Derindex | Kişisel Arama Motoru & Semantik Arama</title>
+  <meta name="description" content="Derindex: Tamamen lokal çalışan, derinlemesine kişisel arama motoru ve semantik arama sistemi.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Navbar / Header -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <polygon points="11 8 13 12 9 12 11 8" fill="currentColor"></polygon>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>Derindex</h1>
+          <span class="badge-tag">Offline & Private</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="nav-tabs" role="tablist">
+        <button id="tab-btn-search" class="tab-btn active" role="tab" aria-selected="true" onclick="switchTab('search')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          Search Engine
+        </button>
+        <button id="tab-btn-status" class="tab-btn" role="tab" aria-selected="false" onclick="switchTab('status')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+          </svg>
+          System & Index Stats
+        </button>
+      </nav>
+
+      <!-- Status Indicator -->
+      <div class="system-status-pill" id="system-status-pill">
+        <span class="status-dot online"></span>
+        <span class="status-label" id="status-label">Engine Ready</span>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- TAB 1: SEARCH ENGINE -->
+      <section id="view-search" class="tab-view active">
+        <div class="search-hero">
+          <h2 class="hero-title">Kişisel Belgelerinizde <span class="gradient-text">Akıllı Arama</span></h2>
+          <p class="hero-subtitle">Okapi BM25 ve Vektör Semantik Aramayı Birleştiren Yüksek Performanslı Yerel Motor</p>
+          
+          <div class="search-box-card">
+            <div class="search-input-wrapper">
+              <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input 
+                type="text" 
+                id="search-input" 
+                placeholder="Dosya adı, kod, fonksiyon adı veya kavram ara... (örn: memory allocation, process)" 
+                autocomplete="off"
+              />
+              <button id="btn-search-clear" class="btn-clear" onclick="clearSearchInput()" title="Temizle">✕</button>
+              <button id="btn-run-search" class="btn-primary" onclick="performSearch()">
+                <span>Ara</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                  <polyline points="12 5 19 12 12 19"></polyline>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Search Controls & Tuners -->
+            <div class="search-controls">
+              <div class="control-group">
+                <label class="control-label">Arama Modu:</label>
+                <div class="segmented-control">
+                  <button type="button" class="segment-btn active" id="mode-hybrid" onclick="setSearchMode('hybrid')">Hibrit</button>
+                  <button type="button" class="segment-btn" id="mode-bm25" onclick="setSearchMode('bm25')">BM25 (Kelime)</button>
+                  <button type="button" class="segment-btn" id="mode-semantic" onclick="setSearchMode('semantic')">Semantik (Vektör)</button>
+                </div>
+              </div>
+
+              <div class="control-group slider-group" id="alpha-slider-container">
+                <div class="slider-header">
+                  <span class="control-label">Hibrit Ağırlık (Alpha):</span>
+                  <span class="slider-value-badge" id="alpha-val-badge">0.50</span>
+                </div>
+                <div class="slider-track-wrap">
+                  <span class="slider-tag">Semantik (0.0)</span>
+                  <input type="range" id="alpha-slider" min="0" max="1" step="0.05" value="0.5" oninput="onAlphaChange(this.value)">
+                  <span class="slider-tag">BM25 (1.0)</span>
+                </div>
+              </div>
+
+              <div class="control-group checkbox-group">
+                <label class="custom-checkbox">
+                  <input type="checkbox" id="code-only-toggle" onchange="performSearch()">
+                  <span class="checkbox-mark"></span>
+                  <span>Yalnızca Kod Dosyaları</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Search Results Stream -->
+        <div class="results-container">
+          <div class="results-header" id="results-header" style="display: none;">
+            <div class="results-count" id="results-count">0 sonuç bulundu</div>
+            <div class="results-meta" id="results-meta"></div>
+          </div>
+
+          <div id="results-loading" class="loading-state" style="display: none;">
+            <div class="spinner"></div>
+            <p>Sonuçlar taranıyor ve yeniden sıralanıyor (reranking)...</p>
+          </div>
+
+          <div id="results-list" class="results-grid"></div>
+
+          <div id="results-empty" class="empty-state">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <h3>Aramaya başlamak için bir sorgu girin</h3>
+            <p>PDF belgeleriniz, kaynak kodlarınız, markdown notlarınız ve metin dosyalarınız saniyeler içinde listelenir.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: SYSTEM STATS & DIRECTORY INDEXER -->
+      <section id="view-status" class="tab-view" style="display: none;">
+        <div class="status-grid">
+          
+          <div class="stat-card">
+            <div class="stat-icon docs">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              </svg>
+            </div>
+            <div class="stat-data">
+              <span class="stat-number" id="stat-docs">-</span>
+              <span class="stat-label">İndekslenen Belge</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon chunks">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+            </div>
+            <div class="stat-data">
+              <span class="stat-number" id="stat-chunks">-</span>
+              <span class="stat-label">Akıllı Parça (Chunk)</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon terms">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="4 7 4 4 20 4 20 7"></polyline>
+                <line x1="9" y1="20" x2="15" y2="20"></line>
+                <line x1="12" y1="4" x2="12" y2="20"></line>
+              </svg>
+            </div>
+            <div class="stat-data">
+              <span class="stat-number" id="stat-terms">-</span>
+              <span class="stat-label">Ters İndeks Terimi</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-icon symbols">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 18 22 12 16 6"></polyline>
+                <polyline points="8 6 2 12 8 18"></polyline>
+              </svg>
+            </div>
+            <div class="stat-data">
+              <span class="stat-number" id="stat-symbols">-</span>
+              <span class="stat-label">Kod Sembolü (AST)</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Quick Indexing Panel -->
+        <div class="indexer-box-card">
+          <h3>Yeni Klasör İndeksle</h3>
+          <p>Laptopunuzdaki herhangi bir klasör yolunu girerek tüm PDF, Kod, Markdown ve metin dosyalarını indeksleyin.</p>
+          
+          <div class="index-input-wrapper">
+            <input type="text" id="index-folder-input" placeholder="Örn: ~/Belgeler veya ~/Projeler" />
+            <button id="btn-trigger-index" class="btn-primary" onclick="triggerFolderIndex()">
+              <span>İndekslemeyi Başlat</span>
+            </button>
+          </div>
+          <div id="index-output" class="index-output-msg" style="display: none;"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
