@@ -182,5 +182,124 @@ class TestIncrementalHashing(unittest.TestCase):
         self.assertNotEqual(hash1, hash2)
 
 
+class TestExtendedParsers(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_shell_script_parsing(self):
+        from app.parsers.code_parser import CodeParser
+        parser = CodeParser()
+        sh_file = self.root / "deploy.sh"
+        sh_file.write_text("""#!/usr/bin/env bash
+export APP_PORT=8000
+
+backup_database() {
+    echo "Backing up..."
+}
+
+function start_server {
+    echo "Starting..."
+}
+""", encoding="utf-8")
+
+        parsed = parser.parse(sh_file)
+        self.assertEqual(parsed.filename, "deploy.sh")
+        symbol_names = [s.name for s in parsed.symbols]
+        self.assertIn("backup_database", symbol_names)
+        self.assertIn("start_server", symbol_names)
+        self.assertIn("APP_PORT", symbol_names)
+
+    def test_office_docx_parsing(self):
+        from app.parsers.office_parser import OfficeParser
+        parser = OfficeParser()
+        docx_file = self.root / "report.docx"
+
+        # Build valid docx zip
+        import zipfile
+        with zipfile.ZipFile(docx_file, "w") as z:
+            z.writestr("word/document.xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+    <w:body>
+        <w:p><w:r><w:t>Linux Kernel Memory Architecture</w:t></w:r></w:p>
+        <w:p><w:r><w:t>Virtual memory paging and TLB caching.</w:t></w:r></w:p>
+    </w:body>
+</w:document>""")
+
+        parsed = parser.parse(docx_file)
+        self.assertGreater(len(parsed.chunks), 0)
+        self.assertTrue(any("Linux Kernel Memory Architecture" in c.text for c in parsed.chunks))
+
+    def test_office_pptx_parsing(self):
+        from app.parsers.office_parser import OfficeParser
+        parser = OfficeParser()
+        pptx_file = self.root / "presentation.pptx"
+
+        import zipfile
+        with zipfile.ZipFile(pptx_file, "w") as z:
+            z.writestr("ppt/slides/slide1.xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+    <a:t>High Performance Database Engines</a:t>
+</p:sld>""")
+
+        parsed = parser.parse(pptx_file)
+        self.assertGreater(len(parsed.chunks), 0)
+        self.assertTrue(any("High Performance Database Engines" in c.text for c in parsed.chunks))
+
+    def test_image_svg_parsing(self):
+        from app.parsers.image_parser import ImageParser
+        parser = ImageParser()
+        svg_file = self.root / "diagram.svg"
+        svg_file.write_text("""<svg xmlns="http://www.w3.org/2000/svg">
+    <title>Microservice Topology</title>
+    <text x="20" y="40">Distributed Cache Cluster</text>
+</svg>""", encoding="utf-8")
+
+        parsed = parser.parse(svg_file)
+        self.assertGreater(len(parsed.chunks), 0)
+        self.assertTrue(any("Distributed Cache Cluster" in c.text for c in parsed.chunks))
+
+    def test_image_bitmap_metadata(self):
+        from app.parsers.image_parser import ImageParser
+        from PIL import Image
+        parser = ImageParser()
+        png_file = self.root / "screenshot_dashboard_analytics.png"
+        img = Image.new("RGB", (800, 600), color="blue")
+        img.save(png_file)
+
+        parsed = parser.parse(png_file)
+        self.assertGreater(len(parsed.chunks), 0)
+        chunk_text = parsed.chunks[0].text
+        self.assertIn("800x600", chunk_text)
+        self.assertIn("dashboard", chunk_text)
+        self.assertIn("analytics", chunk_text)
+
+    def test_csv_and_toml_parsing(self):
+        from app.parsers.text_parser import TextParser
+        parser = TextParser()
+
+        # CSV test
+        csv_file = self.root / "servers.csv"
+        csv_file.write_text("""hostname,ip_address,role
+srv-node-01,192.168.1.10,primary_database
+srv-node-02,192.168.1.11,cache_replica
+""", encoding="utf-8")
+        parsed_csv = parser.parse(csv_file)
+        self.assertTrue(any("primary_database" in c.text for c in parsed_csv.chunks))
+
+        # TOML test
+        toml_file = self.root / "config.toml"
+        toml_file.write_text("""[database]
+host = "localhost"
+port = 5432
+""", encoding="utf-8")
+        parsed_toml = parser.parse(toml_file)
+        self.assertTrue(any("localhost" in c.text for c in parsed_toml.chunks))
+
+
 if __name__ == "__main__":
     unittest.main()
+

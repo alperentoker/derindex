@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <title>Derindex System Topology Diagram</title>
+  <desc>High performance local personal search engine architecture</desc>
+  <text x="50" y="80" font-family="sans-serif" font-size="20">Okapi BM25 Lexical Inverted Index</text>
+  <text x="50" y="160" font-family="sans-serif" font-size="20">Dense Semantic Vector Store</text>
+  <text x="50" y="240" font-family="sans-serif" font-size="20">Reciprocal Rank Fusion Reranker</text>
+</svg>

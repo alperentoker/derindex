@@ -10,3 +10,5 @@ torch>=2.2.0
 transformers>=4.40.0
 sentence-transformers>=2.7.0
 scikit-learn>=1.4.0
+Pillow>=10.0.0
+python-docx>=1.0.0

@@ -15,15 +15,26 @@ logger = logging.getLogger(__name__)
 class CodeParser(BaseParser):
     SUPPORTED_LANGUAGES: Dict[str, str] = {
         ".py": "python",
+        ".sh": "shell",
+        ".bash": "shell",
+        ".zsh": "shell",
+        ".fish": "shell",
         ".c": "c",
         ".cpp": "cpp",
         ".cc": "cpp",
+        ".cxx": "cpp",
         ".h": "c_header",
         ".hpp": "cpp_header",
         ".js": "javascript",
         ".jsx": "javascript_react",
         ".ts": "typescript",
         ".tsx": "typescript_react",
+        ".rs": "rust",
+        ".go": "go",
+        ".java": "java",
+        ".kt": "kotlin",
+        ".sql": "sql",
+        ".ipynb": "jupyter",
     }
 
     def __init__(self):
@@ -43,6 +54,12 @@ class CodeParser(BaseParser):
 
         if lang == "python":
             return self._parse_python(file_path, content, lines)
+        elif lang == "shell":
+            return self._parse_shell(file_path, content, lines)
+        elif lang == "jupyter":
+            return self._parse_jupyter(file_path, content)
+        elif lang in {"rust", "go", "java", "kotlin", "sql"}:
+            return self._parse_generic_code(file_path, content, lines, lang)
         elif lang in {"c", "cpp", "c_header", "cpp_header"}:
             return self._parse_c_cpp(file_path, content, lines, lang)
         elif lang in {"javascript", "javascript_react", "typescript", "typescript_react"}:
@@ -267,6 +284,156 @@ class CodeParser(BaseParser):
                 fn_name = fn_match.group(1) or fn_match.group(2)
                 if fn_name:
                     symbols.append(CodeSymbol(name=fn_name, kind="function", line_number=idx))
+
+        chunks = self.chunker.chunk_text(
+            text=content,
+            code_type=lang,
+            start_line_offset=1,
+            symbols=symbols
+        )
+
+        return ParsedDocument(
+            path=str(file_path.resolve()),
+            filename=file_path.name,
+            extension=file_path.suffix.lower(),
+            title=file_path.stem,
+            chunks=chunks,
+            symbols=symbols,
+            metadata={"language": lang, "symbols_count": len(symbols)}
+        )
+
+    def _parse_shell(self, file_path: Path, content: str, lines: List[str]) -> ParsedDocument:
+        """Parses Bash/Zsh/Shell scripts extracting function names, aliases, and variables."""
+        symbols: List[CodeSymbol] = []
+        # Shell function patterns: foo() {, function foo {, function foo() {
+        func_pattern = re.compile(r'^\s*(?:function\s+)?([A-Za-z0-9_.-]+)\s*\(\)\s*\{|^\s*function\s+([A-Za-z0-9_.-]+)\s*\{')
+        alias_pattern = re.compile(r'^\s*alias\s+([A-Za-z0-9_.-]+)=')
+        export_pattern = re.compile(r'^\s*export\s+([A-Za-z0-9_]+)=')
+
+        for idx, line in enumerate(lines, start=1):
+            fn_match = func_pattern.search(line)
+            if fn_match:
+                name = fn_match.group(1) or fn_match.group(2)
+                if name:
+                    symbols.append(CodeSymbol(name=name, kind="function", line_number=idx))
+
+            alias_match = alias_pattern.search(line)
+            if alias_match:
+                symbols.append(CodeSymbol(name=alias_match.group(1), kind="alias", line_number=idx))
+
+            exp_match = export_pattern.search(line)
+            if exp_match:
+                symbols.append(CodeSymbol(name=exp_match.group(1), kind="variable", line_number=idx))
+
+        chunks = self.chunker.chunk_text(
+            text=content,
+            code_type="shell",
+            start_line_offset=1,
+            symbols=symbols
+        )
+
+        return ParsedDocument(
+            path=str(file_path.resolve()),
+            filename=file_path.name,
+            extension=file_path.suffix.lower(),
+            title=file_path.stem,
+            chunks=chunks,
+            symbols=symbols,
+            metadata={"language": "shell", "symbols_count": len(symbols)}
+        )
+
+    def _parse_jupyter(self, file_path: Path, content: str) -> ParsedDocument:
+        """Parses Jupyter Notebooks (.ipynb), extracting code and markdown cells."""
+        import json
+        chunks: List[ParsedChunk] = []
+        symbols: List[CodeSymbol] = []
+
+        try:
+            nb = json.loads(content)
+            cells = nb.get("cells", [])
+            line_cursor = 1
+
+            for cell_idx, cell in enumerate(cells, start=1):
+                cell_type = cell.get("cell_type", "code")
+                src = "".join(cell.get("source", []))
+                if not src.strip():
+                    continue
+
+                cell_lines = src.count("\n") + 1
+
+                # If code cell, extract python definitions
+                if cell_type == "code":
+                    for sub_idx, line in enumerate(src.splitlines(), start=line_cursor):
+                        fn_match = re.match(r'^\s*def\s+([A-Za-z0-9_]+)\s*\(', line)
+                        if fn_match:
+                            symbols.append(CodeSymbol(name=fn_match.group(1), kind="function", line_number=sub_idx))
+                        cls_match = re.match(r'^\s*class\s+([A-Za-z0-9_]+)', line)
+                        if cls_match:
+                            symbols.append(CodeSymbol(name=cls_match.group(1), kind="class", line_number=sub_idx))
+
+                chunks.append(ParsedChunk(
+                    text=src,
+                    section_title=f"Cell {cell_idx} ({cell_type})",
+                    code_type="python" if cell_type == "code" else None,
+                    start_line=line_cursor,
+                    end_line=line_cursor + cell_lines - 1,
+                    symbols=symbols
+                ))
+                line_cursor += cell_lines
+
+        except Exception as e:
+            logger.debug(f"Failed to parse JSON for ipynb {file_path.name}: {e}")
+            return self._fallback_code_parse(file_path, content, content.splitlines(), "jupyter")
+
+        return ParsedDocument(
+            path=str(file_path.resolve()),
+            filename=file_path.name,
+            extension=".ipynb",
+            title=file_path.stem,
+            chunks=chunks,
+            symbols=symbols,
+            metadata={"language": "jupyter", "cells_count": len(chunks)}
+        )
+
+    def _parse_generic_code(self, file_path: Path, content: str, lines: List[str], lang: str) -> ParsedDocument:
+        """Regex-based symbol extractor for Rust, Go, Java, Kotlin, SQL."""
+        symbols: List[CodeSymbol] = []
+
+        patterns = {
+            "rust": [
+                (r'fn\s+([A-Za-z0-9_]+)\s*(?:<[^>]+>)?\s*\(', "function"),
+                (r'struct\s+([A-Za-z0-9_]+)', "struct"),
+                (r'enum\s+([A-Za-z0-9_]+)', "enum"),
+                (r'trait\s+([A-Za-z0-9_]+)', "trait"),
+            ],
+            "go": [
+                (r'func\s+(?:\([^)]+\)\s*)?([A-Za-z0-9_]+)\s*\(', "function"),
+                (r'type\s+([A-Za-z0-9_]+)\s+struct', "struct"),
+                (r'type\s+([A-Za-z0-9_]+)\s+interface', "interface"),
+            ],
+            "java": [
+                (r'(?:public|private|protected)?\s*class\s+([A-Za-z0-9_]+)', "class"),
+                (r'(?:public|private|protected)?\s*interface\s+([A-Za-z0-9_]+)', "interface"),
+                (r'(?:public|private|protected)?\s*(?:static\s+)?[A-Za-z0-9_<>[\]]+\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{', "method"),
+            ],
+            "kotlin": [
+                (r'fun\s+([A-Za-z0-9_]+)\s*\(', "function"),
+                (r'class\s+([A-Za-z0-9_]+)', "class"),
+            ],
+            "sql": [
+                (r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z0-9_.]+)', "table"),
+                (r'CREATE\s+PROCEDURE\s+([A-Za-z0-9_.]+)', "procedure"),
+                (r'CREATE\s+VIEW\s+([A-Za-z0-9_.]+)', "view"),
+                (r'CREATE\s+INDEX\s+([A-Za-z0-9_.]+)', "index"),
+            ],
+        }
+
+        lang_patterns = patterns.get(lang, [])
+        for idx, line in enumerate(lines, start=1):
+            for pat, kind in lang_patterns:
+                m = re.search(pat, line, re.IGNORECASE if lang == "sql" else 0)
+                if m:
+                    symbols.append(CodeSymbol(name=m.group(1), kind=kind, line_number=idx))
 
         chunks = self.chunker.chunk_text(
             text=content,

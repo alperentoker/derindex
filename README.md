@@ -16,7 +16,7 @@ Harici hiçbir bulut servisine, üçüncü parti API'lara veya harici sunuculara
 
 ```
                         Linux Dosya Sistemi
-     (PDF, TXT, MD, HTML, Python, C/C++, JS, JSON, YAML)
+ (PDF, DOCX, PPTX, XLSX, ODF, Shell .sh, Kodlar, CSV, Görseller, Notlar)
                                  │
                                  ▼
                      Dosya Tarayıcı (Crawler)
@@ -24,7 +24,7 @@ Harici hiçbir bulut servisine, üçüncü parti API'lara veya harici sunuculara
                                  │
                                  ▼
                      Belge Ayrıştırıcı (Parsers)
-       (PDF Sayfa No, MD Başlık Hiyerarşisi, Python AST)
+    (Office XML, Slayt No, Kod AST, EXIF/Görsel, MD Hiyerarşisi)
                                  │
                                  ▼
                    Metadata + SHA-256 Sağlama
@@ -51,7 +51,7 @@ Harici hiçbir bulut servisine, üçüncü parti API'lara veya harici sunuculara
                                  ▼
                       Arama Sonuçları
         - Eşleşen Metin Snippet'ı (Highlight)
-        - Dosya Yolu, Sayfa No ve Bölüm Adı
+        - Dosya Yolu, Sayfa / Slayt No ve Bölüm Adı
         - Kod Satır Aralıkları ve AST Sembolleri
         - BM25 & Semantik Skor Dağılımı
 ```
@@ -73,12 +73,12 @@ Harici hiçbir bulut servisine, üçüncü parti API'lara veya harici sunuculara
      $$\text{final\_score} = \alpha \cdot \text{bm25\_score} + (1 - \alpha) \cdot \text{semantic\_score}$$
 
 3. **Gelişmiş Belge Ayrıştırma (Parsers & AST)**:
-   - **Python**: `ast` modülü ile fonksiyonlar, sınıflar, metodlar, importlar ve kesin satır aralıkları taranır.
-   - **C/C++**: `class`, `struct`, fonksiyonlar, `#include` bildirimleri taranır.
-   - **JavaScript / TypeScript**: Fonksiyonlar, sınıflar ve importlar taranır.
-   - **PDF**: `pypdf` ile sayfa numarası korunarak çıkarılır.
-   - **Markdown**: Başlık hiyerarşisi (`#`, `##`, `###`) chunk başlığı olarak korunur.
-   - **JSON / YAML / TXT**: Biçimlendirilmiş yapısal metin çıkarımı.
+   - **Office Belgeleri**: `.docx` (Word), `.pptx` (PowerPoint slaytları), `.xlsx` (Excel tabloları), `.odt` / `.ods` / `.odp` (LibreOffice), `.rtf`, `.doc`.
+   - **Görseller ve Vektörler**: `.png`, `.jpg`, `.jpeg`, `.webp`, `.svg` (SVG içi metinler, EXIF kamera/tarih bilgileri, çözünürlük ve semantik klasör etiketleri).
+   - **Kabuk Script'leri ve Notebooks**: `.sh`, `.bash`, `.zsh`, `.fish` (fonksiyonlar, aliaslar, exportlar) ve `.ipynb` (Jupyter hücreleri).
+   - **Programlama Dilleri**: Python AST, C/C++, Rust (`fn`, `struct`), Go (`func`, `type`), Java/Kotlin (`class`, `method`), SQL (`table`, `proc`), JavaScript/TypeScript.
+   - **Veri ve Yapılandırma**: `.csv`, `.tsv` (satır ve sütun eşleşmesi), `.json`, `.yaml`, `.toml`, `.ini`, `.xml`, `.log`.
+   - **PDF & Markdown**: `pypdf` sayfa no koruması ve Markdown başlık hiyerarşisi (`#`, `##`, `###`).
 
 4. **Artımlı İndeksleme (Incremental Indexing & Watcher)**:
    - Her dosyanın **SHA-256** hash'i takip edilir. Değişmeyen dosyalar tekrar taranmaz ve vakit harcanmaz.
@@ -214,9 +214,9 @@ derindex/
 │   ├── cli/            # CLI komut satırı arayüzü (argparse, rich tablolar)
 │   ├── crawler/        # Dizin tarayıcısı ve watchdog gerçek zamanlı izleyici
 │   ├── database/       # SQLite şeması, bağlantı yöneticisi (WAL mode)
-│   ├── embeddings/     # Sentence-Transformers ve NumPy vektör deposu
+│   ├── embeddings/     # Dense embedding ve NumPy vektör deposu
 │   ├── indexing/       # Özel Tokenizer, Ters İndeks, Okapi BM25, TF-IDF
-│   ├── parsers/        # PDF, Markdown, AST Kod (Python/C/JS), HTML ayrıştırıcılar
+│   ├── parsers/        # Office (DOCX/PPTX/XLSX/ODF), Image/EXIF, Code/AST, PDF, MD
 │   ├── search/         # Hibrit skorlama (Alpha fusion) ve yeniden sıralayıcı (RRF)
 │   └── web/            # FastAPI arka uç ve modern Vanilla CSS web arayüzü
 ├── data/

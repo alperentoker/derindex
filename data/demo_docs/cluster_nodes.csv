@@ -1,0 +1,4 @@
+node_name,ip_address,datacenter,service_role
+alpha-node-01,10.0.1.15,europe-west1,search_indexer
+alpha-node-02,10.0.1.16,europe-west1,vector_store_replica
+beta-node-01,10.0.2.20,us-central1,backup_storage
