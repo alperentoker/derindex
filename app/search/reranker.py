@@ -46,8 +46,11 @@ class Reranker:
             # Boost if filename matches query
             if item.filename:
                 fn_lower = item.filename.lower()
-                if query_lower in fn_lower:
-                    boost += 0.15
+                fn_tokens = re.findall(r'[a-z0-9_ğüşıöç]+', fn_lower)
+                if query_lower == fn_lower or query_lower in fn_tokens:
+                    boost += 0.40
+                elif query_lower in fn_lower:
+                    boost += 0.20
 
             # Exact phrase match in snippet
             if query_lower in item.matched_snippet.lower():

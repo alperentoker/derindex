@@ -6,6 +6,13 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Any, Set
 from contextlib import contextmanager
 
+try:
+    import numpy as np
+    sqlite3.register_adapter(np.int64, int)
+    sqlite3.register_adapter(np.int32, int)
+except ImportError:
+    pass
+
 from config import config
 from .models import DocumentRecord, ChunkRecord, SymbolRecord, InvertedIndexRecord
 
@@ -133,6 +140,7 @@ class Database:
         return chunk_ids
 
     def get_chunk(self, chunk_id: int) -> Optional[Tuple[ChunkRecord, DocumentRecord]]:
+        chunk_id = int(chunk_id)
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -178,6 +186,7 @@ class Database:
     def get_chunks_by_ids(self, chunk_ids: List[int]) -> Dict[int, Tuple[ChunkRecord, DocumentRecord]]:
         if not chunk_ids:
             return {}
+        chunk_ids = [int(cid) for cid in chunk_ids]
         placeholders = ",".join("?" for _ in chunk_ids)
         result = {}
         with self.get_connection() as conn:
@@ -264,6 +273,60 @@ class Database:
                 })
             return results
 
+    def find_chunk_ids_by_filename(self, query: str, limit: int = 20) -> List[Tuple[int, float]]:
+        """Finds chunk IDs of documents whose filename matches query."""
+        if not query or not query.strip():
+            return []
+        q_clean = query.strip()
+        pattern = f"%{q_clean}%"
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT c.id, d.filename
+                FROM documents d
+                JOIN chunks c ON c.doc_id = d.id AND c.chunk_index = 0
+                WHERE d.filename LIKE ? OR d.path LIKE ?
+                ORDER BY (d.filename = ?) DESC, length(d.filename) ASC
+                LIMIT ?
+                """,
+                (pattern, pattern, q_clean, limit)
+            )
+            results = []
+            for row in cursor.fetchall():
+                cid = int(row["id"])
+                fn = row["filename"].lower()
+                score = 1.0 if q_clean.lower() == fn else 0.85
+                results.append((cid, score))
+            return results
+
+    def find_chunk_ids_by_symbol(self, query: str, limit: int = 20) -> List[Tuple[int, float]]:
+        """Finds chunk IDs of symbols matching query."""
+        if not query or not query.strip():
+            return []
+        q_clean = query.strip()
+        pattern = f"%{q_clean}%"
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT DISTINCT c.id, s.name
+                FROM symbols s
+                JOIN chunks c ON s.chunk_id = c.id
+                WHERE s.name LIKE ?
+                ORDER BY (s.name = ?) DESC, length(s.name) ASC
+                LIMIT ?
+                """,
+                (pattern, q_clean, limit)
+            )
+            results = []
+            for row in cursor.fetchall():
+                cid = int(row["id"])
+                sym = row["name"].lower()
+                score = 0.95 if q_clean.lower() == sym else 0.75
+                results.append((cid, score))
+            return results
+
     # Inverted Index & Postings
     def insert_postings(self, postings: List[InvertedIndexRecord]) -> None:
         if not postings:
@@ -304,6 +367,19 @@ class Database:
             cursor.execute(
                 f"SELECT term, doc_id, chunk_id, term_freq FROM inverted_index WHERE term IN ({placeholders})",
                 terms
+            )
+            return cursor.fetchall()
+
+    def get_postings_for_terms_prefix(self, prefix: str, limit: int = 100) -> List[Tuple[str, int, int, int]]:
+        """Returns list of (term, doc_id, chunk_id, term_freq) for terms starting with prefix."""
+        if not prefix or len(prefix) < 2:
+            return []
+        pattern = f"{prefix}%"
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT term, doc_id, chunk_id, term_freq FROM inverted_index WHERE term LIKE ? LIMIT ?",
+                (pattern, limit)
             )
             return cursor.fetchall()
 

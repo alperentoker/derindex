@@ -27,7 +27,7 @@ DEFAULT_STOPWORDS: Set[str] = {
     "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", "yours",
     # Turkish stopwords
     "ve", "ile", "de", "da", "bu", "şu", "o", "bir", "gibi", "için", "olan",
-    "kadar", "daha", "en", "çok", "ama", "fakat", "ancak", "lakin", "çünkü",
+    "kadar", "daha", "çok", "ama", "fakat", "ancak", "lakin", "çünkü",
     "veya", "ya", "ise", "her", "hiç", "bazı", "tüm", "hep", "nasıl", "neden",
     "ne", "nerede", "kim", "hangi", "mi", "mı", "mu", "mü", "bunu", "şunu", "onu"
 }
@@ -81,6 +81,14 @@ class Tokenizer:
 
             if self._is_valid_token(token):
                 tokens.append(token)
+
+        # Fallback: if all candidate tokens were dropped (e.g. stopword-only query or short query),
+        # keep the raw alphanumeric tokens so search queries don't result in empty searches.
+        if not tokens and raw_tokens:
+            for token in raw_tokens:
+                token = token.strip("_")
+                if token and re.search(r'[a-z0-9ğüşıöç]', token):
+                    tokens.append(token)
 
         return tokens
 

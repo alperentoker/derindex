@@ -49,28 +49,42 @@ class BM25Engine:
         doc_freqs = self.db.get_term_doc_frequencies(unique_query_terms)
         raw_postings = self.db.get_postings_for_terms(unique_query_terms)
 
+        # Fallback: if exact terms yielded no postings, check prefix matching
+        if not raw_postings:
+            prefix_postings = []
+            for term in unique_query_terms:
+                prefix_postings.extend(self.db.get_postings_for_terms_prefix(term, limit=100))
+            if prefix_postings:
+                raw_postings = prefix_postings
+                prefix_terms = list(set(p[0] for p in raw_postings))
+                prefix_dfs = self.db.get_term_doc_frequencies(prefix_terms)
+                for pt in prefix_terms:
+                    doc_freqs[pt] = prefix_dfs.get(pt, 1)
+
         # Calculate IDF for each query term
         idfs: Dict[str, float] = {}
-        for term in unique_query_terms:
+        all_terms = list(set([p[0] for p in raw_postings] + unique_query_terms))
+        for term in all_terms:
             df = doc_freqs.get(term, 0)
             idfs[term] = self.compute_idf(df, total_chunks)
 
         # Accumulate scores per chunk
         chunk_scores: Dict[int, float] = {}
         for term, doc_id, chunk_id, term_freq in raw_postings:
+            cid = int(chunk_id)
             idf = idfs.get(term, 0.0)
             if idf <= 0.0:
                 continue
 
-            doc_len = chunk_lengths.get(chunk_id, int(avgdl))
+            doc_len = chunk_lengths.get(cid, int(avgdl))
 
             # BM25 term weight
             numerator = term_freq * (self.k1 + 1.0)
             denominator = term_freq + self.k1 * (1.0 - self.b + self.b * (doc_len / avgdl))
             term_score = idf * (numerator / denominator)
 
-            chunk_scores[chunk_id] = chunk_scores.get(chunk_id, 0.0) + term_score
+            chunk_scores[cid] = chunk_scores.get(cid, 0.0) + term_score
 
         # Sort by score descending
         sorted_results = sorted(chunk_scores.items(), key=lambda x: x[1], reverse=True)
-        return sorted_results[:top_k]
+        return [(int(cid), s) for cid, s in sorted_results[:top_k]]

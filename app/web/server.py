@@ -63,14 +63,26 @@ def serve_favicon():
 def api_search(
     q: str = Query(..., min_length=1),
     alpha: float = Query(0.5, ge=0.0, le=1.0),
-    limit: int = Query(10, ge=1, le=100),
+    page: int = Query(1, ge=1),
+    limit: int = Query(15, ge=1, le=100),
     code_only: bool = Query(False)
 ):
-    """Hybrid search endpoint."""
-    results = searcher.search(query=q, alpha=alpha, limit=limit, code_only=code_only)
+    """Hybrid search endpoint with pagination."""
+    results, total_count = searcher.search_paginated(
+        query=q,
+        page=page,
+        limit=limit,
+        alpha=alpha,
+        code_only=code_only
+    )
+    total_pages = max(1, (total_count + limit - 1) // limit) if total_count > 0 else 1
     return {
         "query": q,
         "alpha": alpha,
+        "page": page,
+        "limit": limit,
+        "total": total_count,
+        "total_pages": total_pages,
         "count": len(results),
         "results": [r.to_dict() for r in results]
     }

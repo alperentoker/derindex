@@ -326,6 +326,25 @@ body {
   color: var(--text-primary);
 }
 
+.custom-select {
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--ease), background-color var(--ease);
+}
+
+.custom-select:hover,
+.custom-select:focus {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+
 .slider-group {
   display: flex;
   flex-direction: column;
@@ -709,6 +728,91 @@ body {
   color: var(--text-tertiary);
   max-width: 440px;
   margin: 0 auto;
+}
+
+/* PAGINATION BAR */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 32px;
+  padding: 16px 0 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--ease), border-color var(--ease), opacity var(--ease);
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  border-color: var(--border-hover);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.pagination-numbers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.page-num-btn {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--ease);
+}
+
+.page-num-btn:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.page-num-btn.active {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.35);
+}
+
+.page-dots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
 }
 
 /* RESPONSIVE */

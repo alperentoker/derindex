@@ -181,6 +181,7 @@ class Config:
     EMBEDDING_MODEL_NAME: str = "all-MiniLM-L6-v2"
     EMBEDDING_DIMENSION: int = 384
     EMBEDDING_BATCH_SIZE: int = 64
+    SEMANTIC_MIN_SCORE: float = 0.36
 
     # Web Server Settings
     WEB_HOST: str = "0.0.0.0"

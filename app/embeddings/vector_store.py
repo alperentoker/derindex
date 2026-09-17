@@ -23,7 +23,7 @@ class VectorStore:
         if self.storage_path.exists():
             try:
                 data = np.load(self.storage_path)
-                self.chunk_ids = list(data["chunk_ids"])
+                self.chunk_ids = [int(x) for x in data["chunk_ids"]]
                 self.matrix = data["matrix"].astype(np.float32)
                 self._id_to_idx = {cid: idx for idx, cid in enumerate(self.chunk_ids)}
                 logger.info(f"Loaded {len(self.chunk_ids)} vectors from {self.storage_path}")
@@ -52,6 +52,8 @@ class VectorStore:
         """
         if len(chunk_ids) == 0 or vectors.size == 0:
             return
+
+        chunk_ids = [int(x) for x in chunk_ids]
 
         if len(chunk_ids) != vectors.shape[0]:
             raise ValueError(f"chunk_ids count ({len(chunk_ids)}) does not match vectors rows ({vectors.shape[0]})")
@@ -121,7 +123,7 @@ class VectorStore:
         results: List[Tuple[int, float]] = []
         for idx in sorted_indices:
             score = float(scores[idx])
-            results.append((self.chunk_ids[idx], score))
+            results.append((int(self.chunk_ids[idx]), score))
 
         return results
 

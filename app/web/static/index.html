@@ -104,9 +104,19 @@
                 </div>
               </div>
 
+              <div class="control-group">
+                <label class="control-label" for="limit-select">Sayfa Başı:</label>
+                <select id="limit-select" class="custom-select" onchange="onLimitChange()">
+                  <option value="15">15 Sonuç</option>
+                  <option value="25" selected>25 Sonuç</option>
+                  <option value="50">50 Sonuç</option>
+                  <option value="100">100 Sonuç</option>
+                </select>
+              </div>
+
               <div class="control-group checkbox-group">
                 <label class="custom-checkbox">
-                  <input type="checkbox" id="code-only-toggle" onchange="performSearch()">
+                  <input type="checkbox" id="code-only-toggle" onchange="performSearch(1)">
                   <span class="checkbox-mark"></span>
                   <span>Yalnızca Kod Dosyaları</span>
                 </label>
@@ -128,6 +138,25 @@
           </div>
 
           <div id="results-list" class="results-grid"></div>
+
+          <!-- Pagination Navigation -->
+          <nav class="pagination-bar" id="pagination-bar" style="display: none;" aria-label="Sayfalama">
+            <button type="button" class="pagination-btn" id="btn-page-prev" onclick="changePage(-1)" title="Önceki Sayfa">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+              <span>Önceki</span>
+            </button>
+            
+            <div class="pagination-numbers" id="pagination-numbers"></div>
+
+            <button type="button" class="pagination-btn" id="btn-page-next" onclick="changePage(1)" title="Sonraki Sayfa">
+              <span>Sonraki</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </nav>
 
           <div id="results-empty" class="empty-state">
             <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">

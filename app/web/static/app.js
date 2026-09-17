@@ -1,7 +1,9 @@
-// Derindex Interactive Web Client (Pure Search & Semantic Retrieval)
-
 let currentMode = 'hybrid';
 let currentAlpha = 0.5;
+let currentPage = 1;
+let totalPages = 1;
+let totalResults = 0;
+let currentLimit = 25;
 
 document.addEventListener('DOMContentLoaded', () => {
   loadSystemStats();
@@ -9,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const searchInput = document.getElementById('search-input');
   searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
-      performSearch();
+      performSearch(1);
     }
   });
 
@@ -77,13 +79,22 @@ function setSearchMode(mode) {
 
   const query = document.getElementById('search-input').value.trim();
   if (query) {
-    performSearch();
+    performSearch(1);
   }
 }
 
 function onAlphaChange(val) {
   currentAlpha = parseFloat(val);
   document.getElementById('alpha-val-badge').textContent = currentAlpha.toFixed(2);
+}
+
+function onLimitChange() {
+  const limitSelect = document.getElementById('limit-select');
+  currentLimit = parseInt(limitSelect ? limitSelect.value : '25', 10);
+  const query = document.getElementById('search-input').value.trim();
+  if (query) {
+    performSearch(1);
+  }
 }
 
 function clearSearchInput() {
@@ -93,29 +104,54 @@ function clearSearchInput() {
   document.getElementById('results-list').innerHTML = '';
   document.getElementById('results-header').style.display = 'none';
   document.getElementById('results-empty').style.display = 'block';
+  const paginationBar = document.getElementById('pagination-bar');
+  if (paginationBar) paginationBar.style.display = 'none';
 }
 
-async function performSearch() {
+function changePage(delta) {
+  const target = currentPage + delta;
+  if (target >= 1 && target <= totalPages) {
+    goToPage(target);
+  }
+}
+
+function goToPage(page) {
+  if (page < 1 || page > totalPages || page === currentPage) return;
+  performSearch(page);
+  const resultsHeader = document.getElementById('results-header');
+  if (resultsHeader) {
+    resultsHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+async function performSearch(targetPage = 1) {
   const input = document.getElementById('search-input');
   const query = input.value.trim();
   if (!query) return;
+
+  currentPage = targetPage;
+  const limitSelect = document.getElementById('limit-select');
+  currentLimit = parseInt(limitSelect ? limitSelect.value : '25', 10);
 
   const codeOnly = document.getElementById('code-only-toggle').checked;
   const loading = document.getElementById('results-loading');
   const empty = document.getElementById('results-empty');
   const list = document.getElementById('results-list');
   const header = document.getElementById('results-header');
+  const paginationBar = document.getElementById('pagination-bar');
 
   loading.style.display = 'block';
   empty.style.display = 'none';
   header.style.display = 'none';
+  if (paginationBar) paginationBar.style.display = 'none';
   list.innerHTML = '';
 
   try {
     const params = new URLSearchParams({
       q: query,
       alpha: currentAlpha.toString(),
-      limit: '15',
+      page: currentPage.toString(),
+      limit: currentLimit.toString(),
       code_only: codeOnly.toString()
     });
 
@@ -124,24 +160,107 @@ async function performSearch() {
 
     loading.style.display = 'none';
     header.style.display = 'flex';
-    document.getElementById('results-count').textContent = `${data.count} sonuç bulundu`;
-    document.getElementById('results-meta').textContent = `Mod: ${currentMode.toUpperCase()} | Alpha: ${currentAlpha.toFixed(2)}`;
 
-    if (data.results.length === 0) {
+    totalResults = data.total !== undefined ? data.total : data.count;
+    totalPages = data.total_pages !== undefined ? data.total_pages : Math.max(1, Math.ceil(totalResults / currentLimit));
+    currentPage = data.page !== undefined ? data.page : targetPage;
+
+    const startIdx = totalResults > 0 ? (currentPage - 1) * currentLimit + 1 : 0;
+    const endIdx = Math.min(currentPage * currentLimit, totalResults);
+
+    if (totalResults > 0) {
+      document.getElementById('results-count').textContent = `Toplam ${totalResults} sonuç (${startIdx} - ${endIdx} arası)`;
+    } else {
+      document.getElementById('results-count').textContent = `0 sonuç bulundu`;
+    }
+
+    document.getElementById('results-meta').textContent = `Sayfa ${currentPage} / ${totalPages} | Mod: ${currentMode.toUpperCase()} | Alpha: ${currentAlpha.toFixed(2)}`;
+
+    if (!data.results || data.results.length === 0) {
       empty.style.display = 'block';
       empty.querySelector('h3').textContent = `'${query}' için sonuç bulunamadı`;
       empty.querySelector('p').textContent = `Farklı anahtar kelimeler deneyin veya alfa ağırlığını değiştirin.`;
+      if (paginationBar) paginationBar.style.display = 'none';
       return;
     }
 
     renderSearchResults(data.results, query);
+    renderPagination();
   } catch (err) {
     loading.style.display = 'none';
     empty.style.display = 'block';
     empty.querySelector('h3').textContent = 'Arama sırasında bir hata oluştu';
     empty.querySelector('p').textContent = err.message;
+    if (paginationBar) paginationBar.style.display = 'none';
   }
 }
+
+function renderPagination() {
+  const paginationBar = document.getElementById('pagination-bar');
+  if (!paginationBar) return;
+
+  if (totalPages <= 1) {
+    paginationBar.style.display = 'none';
+    return;
+  }
+
+  paginationBar.style.display = 'flex';
+
+  const btnPrev = document.getElementById('btn-page-prev');
+  const btnNext = document.getElementById('btn-page-next');
+  if (btnPrev) btnPrev.disabled = (currentPage <= 1);
+  if (btnNext) btnNext.disabled = (currentPage >= totalPages);
+
+  const container = document.getElementById('pagination-numbers');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const pages = getPaginationRange(currentPage, totalPages);
+
+  pages.forEach(p => {
+    if (p === '...') {
+      const dots = document.createElement('span');
+      dots.className = 'page-dots';
+      dots.textContent = '...';
+      container.appendChild(dots);
+    } else {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `page-num-btn ${p === currentPage ? 'active' : ''}`;
+      btn.textContent = p;
+      btn.title = `Sayfa ${p}`;
+      btn.onclick = () => goToPage(p);
+      container.appendChild(btn);
+    }
+  });
+}
+
+function getPaginationRange(current, total) {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+
+  const range = [];
+  if (current <= 4) {
+    for (let i = 1; i <= 5; i++) range.push(i);
+    range.push('...');
+    range.push(total);
+  } else if (current >= total - 3) {
+    range.push(1);
+    range.push('...');
+    for (let i = total - 4; i <= total; i++) range.push(i);
+  } else {
+    range.push(1);
+    range.push('...');
+    range.push(current - 1);
+    range.push(current);
+    range.push(current + 1);
+    range.push('...');
+    range.push(total);
+  }
+  return range;
+}
+
 
 function renderSearchResults(results, query) {
   const list = document.getElementById('results-list');
