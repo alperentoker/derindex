@@ -114,7 +114,7 @@ Harici hiçbir bulut servisine, üçüncü parti API'lara veya harici sunuculara
 Depoyu klonladıktan sonra tek bir komutla sanal ortamı kurabilir, bağımlılıkları yükleyebilir ve `derindex` komutunu sisteminize bağlayabilirsiniz:
 
 ```bash
-git clone https://github.com/alperen/derindex.git
+git clone https://github.com/alperentoker/derindex.git
 cd derindex
 chmod +x setup.sh
 ./setup.sh
