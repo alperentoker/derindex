@@ -39,15 +39,24 @@ class Crawler:
         self.embedder = embedder or LocalEmbedder.get_instance()
         self.inverted_index = InvertedIndex(self.db)
 
-    def is_safe_and_supported(self, file_path: Path) -> bool:
+    def is_safe_and_supported(self, file_path: Path, check_exists: bool = True) -> bool:
         """Validates that file is not inside sensitive dirs, matches extensions, and is under size limit."""
-        # Check parent directory names against blacklist
-        for part in file_path.parts:
+        # Check parent directory names against blacklist and hidden folders
+        for part in file_path.parts[:-1]:
             if part in config.IGNORED_DIRS:
+                return False
+            if part.startswith(".") and len(part) > 1:
                 return False
 
         # Check filename against sensitive patterns
         name_lower = file_path.name.lower()
+        if name_lower.startswith(".") and not name_lower.endswith(tuple(config.SUPPORTED_EXTENSIONS)):
+            return False
+
+        # Ignore SQLite auxiliary files, lock files, swap files
+        if any(name_lower.endswith(suffix) for suffix in (".db-wal", ".db-shm", ".db-journal", ".lock", ".tmp", ".swp")):
+            return False
+
         for pattern in config.IGNORED_FILE_PATTERNS:
             if pattern in name_lower:
                 return False
@@ -56,6 +65,9 @@ class Crawler:
         if not getattr(config, "ENABLE_UNIVERSAL_FALLBACK", False):
             if file_path.suffix.lower() not in config.SUPPORTED_EXTENSIONS:
                 return False
+
+        if not check_exists:
+            return True
 
         # Check file existence and size
         try:

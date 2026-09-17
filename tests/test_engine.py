@@ -651,6 +651,93 @@ class TestHybridSearchFiltersAndRecency(unittest.TestCase):
         self.assertGreaterEqual(res_filtered[0].recency_boost, 0.08)
 
 
+class TestWatchedFoldersAndDynamicWatcher(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+
+        from app.database.db import Database
+        self.db = Database(db_path=self.root / "test.db")
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_watched_folders_db_operations(self):
+        folder1 = str(self.root / "docs")
+        folder2 = str(self.root / "projects")
+
+        self.db.add_watched_folder(folder1)
+        self.db.add_watched_folder(folder2)
+
+        watched = self.db.get_watched_folders()
+        self.assertEqual(len(watched), 2)
+        self.assertIn(str(Path(folder1).resolve()), watched)
+
+        # Duplicate should be ignored
+        self.db.add_watched_folder(folder1)
+        self.assertEqual(len(self.db.get_watched_folders()), 2)
+
+        # Remove
+        self.db.remove_watched_folder(folder1)
+        self.assertEqual(len(self.db.get_watched_folders()), 1)
+
+    def test_dynamic_watcher_parent_child_subsumption(self):
+        from app.crawler.watcher import FileWatcher
+        from app.crawler.crawler import Crawler
+
+        crawler = Crawler(db=self.db)
+        watcher = FileWatcher(crawler=crawler)
+
+        parent = self.root / "alperen"
+        parent.mkdir(parents=True, exist_ok=True)
+        child = parent / "Belgeler"
+        child.mkdir(parents=True, exist_ok=True)
+
+        # First add child
+        success_child = watcher.add_watch_directory(child)
+        self.assertTrue(success_child)
+        self.assertIn(str(child.resolve()), watcher.get_watched_paths())
+
+        # Now add parent - child watch should be subsumed
+        success_parent = watcher.add_watch_directory(parent)
+        self.assertTrue(success_parent)
+
+        watched = watcher.get_watched_paths()
+        self.assertIn(str(parent.resolve()), watched)
+        # Child should have been removed since parent recursively covers it
+        self.assertNotIn(str(child.resolve()), watched)
+
+        watcher.stop()
+
+    def test_api_endpoints_watched_folders(self):
+        from fastapi.testclient import TestClient
+        from app.web.server import app, db
+
+        client = TestClient(app)
+
+        test_folder = self.root / "api_test_docs"
+        test_folder.mkdir(parents=True, exist_ok=True)
+        (test_folder / "sample.txt").write_text("Hello dynamic watcher test", encoding="utf-8")
+
+        # 1. Post index
+        res = client.post("/api/index", json={"path": str(test_folder)})
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "success")
+        self.assertTrue(data["watched"])
+
+        # 2. Get watched folders
+        res_get = client.get("/api/watched-folders")
+        self.assertEqual(res_get.status_code, 200)
+        watched_list = res_get.json()["watched_folders"]
+        self.assertTrue(any(w["path"] == str(test_folder.resolve()) for w in watched_list))
+
+        # 3. Delete watched folder
+        res_del = client.delete(f"/api/watched-folders?path={test_folder.resolve()}")
+        self.assertEqual(res_del.status_code, 200)
+        self.assertEqual(res_del.json()["status"], "success")
+
+
 if __name__ == "__main__":
     unittest.main()
 

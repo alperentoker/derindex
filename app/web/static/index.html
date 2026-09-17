@@ -250,18 +250,39 @@
 
         </div>
 
-        <!-- Quick Indexing Panel -->
+        <!-- Quick Indexing & Real-time Watching Panel -->
         <div class="indexer-box-card">
-          <h3>Yeni Klasör İndeksle</h3>
-          <p>Laptopunuzdaki herhangi bir klasör yolunu girerek tüm PDF, Kod, Markdown ve metin dosyalarını indeksleyin.</p>
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 6px;">
+            <h3 style="margin-bottom: 0;">Yeni Klasör İndeksle & Canlı İzle</h3>
+            <span class="live-pulse-badge">
+              <span class="pulse-dot"></span> Otomatik Canlı İzleme Aktif
+            </span>
+          </div>
+          <p>Laptopunuzdaki herhangi bir klasör yolunu girerek tüm PDF, Kod, Markdown ve metin dosyalarını indeksleyin. İndekslenen klasörler arka planda otomatik olarak canlı izlenir; yeni eklenen, düzenlenen veya silinen dosyalar sisteme anında yansır.</p>
           
           <div class="index-input-wrapper">
-            <input type="text" id="index-folder-input" placeholder="Örn: ~/Belgeler veya ~/Projeler" />
+            <input type="text" id="index-folder-input" placeholder="Örn: /home/alperen veya ~/Belgeler" />
             <button id="btn-trigger-index" class="btn-primary" onclick="triggerFolderIndex()">
-              <span>İndekslemeyi Başlat</span>
+              <span>İndeksle & Canlı İzle</span>
             </button>
           </div>
           <div id="index-output" class="index-output-msg" style="display: none;"></div>
+
+          <!-- Canlı İzlenen Klasörler Listesi -->
+          <div class="watched-folders-container" style="margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h4 style="margin: 0; font-size: 0.875rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                </svg>
+                Canlı İzlenen Klasörler
+              </h4>
+              <button type="button" class="btn-secondary-sm" onclick="loadWatchedFolders()" title="Yenile">Yenile</button>
+            </div>
+            <div id="watched-folders-list" class="watched-folders-list">
+              <div class="watched-folder-empty">Kayıtlı izlenen klasörler yükleniyor...</div>
+            </div>
+          </div>
         </div>
       </section>
 

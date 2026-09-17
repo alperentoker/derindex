@@ -646,3 +646,30 @@ class Database:
             conn.execute("DELETE FROM term_stats")
             conn.execute("VACUUM")
         logger.info("Database completely cleared and vacuumed.")
+
+    def add_watched_folder(self, folder_path: str) -> bool:
+        """Saves a folder path to the persistent watched_folders table."""
+        resolved = str(Path(folder_path).expanduser().resolve())
+        with self.get_connection(exclusive=True) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR IGNORE INTO watched_folders (path) VALUES (?)",
+                (resolved,)
+            )
+            return cursor.rowcount > 0
+
+    def get_watched_folders(self) -> List[str]:
+        """Returns all persistent watched folder paths."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT path FROM watched_folders ORDER BY added_at ASC")
+            return [row["path"] for row in cursor.fetchall()]
+
+    def remove_watched_folder(self, folder_path: str) -> bool:
+        """Removes a folder path from persistent watched_folders table."""
+        resolved = str(Path(folder_path).expanduser().resolve())
+        with self.get_connection(exclusive=True) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM watched_folders WHERE path = ?", (resolved,))
+            return cursor.rowcount > 0
+

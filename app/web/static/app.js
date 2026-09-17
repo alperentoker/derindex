@@ -9,6 +9,7 @@ let _searchDebounceTimer = null; // Debounce timer for live typing search
 
 document.addEventListener('DOMContentLoaded', () => {
   loadSystemStats();
+  loadWatchedFolders();
 
   const searchInput = document.getElementById('search-input');
 
@@ -64,6 +65,7 @@ function switchTab(tabId) {
 
   if (tabId === 'status') {
     loadSystemStats();
+    loadWatchedFolders();
   }
 }
 
@@ -523,10 +525,10 @@ async function triggerFolderIndex() {
   const out = document.getElementById('index-output');
 
   btn.disabled = true;
-  btn.textContent = 'İndeksleniyor...';
+  btn.textContent = 'İndeksleniyor & Bağlanıyor...';
   out.style.display = 'block';
   out.className = 'index-output-msg';
-  out.textContent = 'Klasör taranıyor ve indeks güncelleniyor...';
+  out.textContent = 'Klasör taranıyor, indeks güncelleniyor ve canlı izleyiciye bağlanıyor...';
 
   try {
     const res = await fetch('/api/index', {
@@ -537,21 +539,79 @@ async function triggerFolderIndex() {
     const data = await res.json();
 
     btn.disabled = false;
-    btn.textContent = 'İndekslemeyi Başlat';
+    btn.textContent = 'İndeksle & Canlı İzle';
 
     if (res.ok) {
       out.className = 'index-output-msg success';
-      out.textContent = `Başarılı! Taranan: ${data.stats.scanned}, İndekslenen: ${data.stats.indexed}, Atlanan: ${data.stats.skipped}`;
+      out.textContent = `Başarılı! Taranan: ${data.stats.scanned}, İndekslenen: ${data.stats.indexed}, Atlanan: ${data.stats.skipped}. Bu klasör artık otomatik canlı izlemede!`;
       loadSystemStats();
+      loadWatchedFolders();
     } else {
       out.className = 'index-output-msg error';
       out.textContent = `Hata: ${data.detail || 'İndeksleme başarısız'}`;
     }
   } catch (err) {
     btn.disabled = false;
-    btn.textContent = 'İndekslemeyi Başlat';
+    btn.textContent = 'İndeksle & Canlı İzle';
     out.className = 'index-output-msg error';
     out.textContent = `Hata: ${err.message}`;
+  }
+}
+
+async function loadWatchedFolders() {
+  const container = document.getElementById('watched-folders-list');
+  if (!container) return;
+
+  try {
+    const res = await fetch('/api/watched-folders');
+    const data = await res.json();
+    const folders = data.watched_folders || [];
+
+    if (folders.length === 0) {
+      container.innerHTML = `<div class="watched-folder-empty">Henüz otomatik izlenen klasör yok. Yukarıdaki kutudan bir klasör ekleyin.</div>`;
+      return;
+    }
+
+    container.innerHTML = '';
+    folders.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'watched-folder-item';
+      el.innerHTML = `
+        <div class="watched-folder-info">
+          <span class="pulse-dot" style="background: ${item.active ? '#10b981' : '#f59e0b'};"></span>
+          <span class="watched-folder-path" title="${escapeHtml(item.path)}">${escapeHtml(item.path)}</span>
+          <span class="watched-folder-status" style="color: ${item.active ? '#34d399' : '#fbbf24'};">
+            ${item.active ? '● Canlı İzlemede' : '○ Pasif'}
+          </span>
+        </div>
+        <button class="btn-remove-watch" title="İzlemeyi Kaldır" onclick="removeWatchedFolder('${escapeHtml(item.path)}')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
+      `;
+      container.appendChild(el);
+    });
+  } catch (err) {
+    console.warn('Could not load watched folders:', err);
+    container.innerHTML = `<div class="watched-folder-empty">İzlenen klasörler listelenirken hata oluştu.</div>`;
+  }
+}
+
+async function removeWatchedFolder(folderPath) {
+  if (!confirm(`'${folderPath}' klasörünü otomatik izleme listesinden kaldırmak istiyor musunuz?`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/watched-folders?path=${encodeURIComponent(folderPath)}`, {
+      method: 'DELETE'
+    });
+    if (res.ok) {
+      await loadWatchedFolders();
+    }
+  } catch (err) {
+    alert(`Hata: ${err.message}`);
   }
 }
 

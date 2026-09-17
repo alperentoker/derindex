@@ -16,12 +16,41 @@ from app.embeddings.embedder import LocalEmbedder
 from app.search.hybrid_search import HybridSearcher
 from app.search.query_parser import QueryParser
 from app.crawler.crawler import Crawler
+from app.crawler.watcher import FileWatcher
+
+
+from contextlib import asynccontextmanager
+
+
+# Shared singletons to prevent memory de-synchronization
+db = Database()
+vector_store = VectorStore()
+embedder = LocalEmbedder.get_instance()
+searcher = HybridSearcher(db=db, vector_store=vector_store, embedder=embedder)
+crawler = Crawler(db=db, vector_store=vector_store, embedder=embedder)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initializes background file watcher on startup and shuts it down on exit."""
+    watcher = FileWatcher.get_instance(crawler=crawler)
+    saved_folders = db.get_watched_folders()
+    for folder in saved_folders:
+        p = Path(folder).expanduser().resolve()
+        if p.exists() and p.is_dir():
+            watcher.add_watch_directory(p)
+    if watcher.watched_paths and not watcher.observer.is_alive():
+        watcher.observer.start()
+    yield
+    watcher = FileWatcher.get_instance(crawler=crawler)
+    watcher.stop()
 
 
 app = FastAPI(
     title="Derindex API",
     description="Derindex: Personal Search Engine & Semantic Search API",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
@@ -31,13 +60,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Shared singletons to prevent memory de-synchronization
-db = Database()
-vector_store = VectorStore()
-embedder = LocalEmbedder.get_instance()
-searcher = HybridSearcher(db=db, vector_store=vector_store, embedder=embedder)
-crawler = Crawler(db=db, vector_store=vector_store, embedder=embedder)
 
 
 # Static files directory
@@ -144,9 +166,61 @@ def api_stats():
 
 @app.post("/api/index")
 def api_index_directory(req: IndexRequest):
-    """Trigger indexing for a folder."""
+    """Trigger indexing for a folder and dynamically register it for automatic background watching."""
     target = Path(req.path).expanduser().resolve()
     if not target.exists() or not target.is_dir():
         raise HTTPException(status_code=400, detail=f"Directory does not exist: {req.path}")
+
+    # 1. Perform initial crawl/index
     stats = crawler.index_directory(target)
-    return {"status": "success", "indexed_path": str(target), "stats": stats}
+
+    # 2. Persist to database so it stays watched across system reboots
+    db.add_watched_folder(str(target))
+
+    # 3. Dynamically register in active watchdog observer
+    watcher = FileWatcher.get_instance(crawler=crawler)
+    watcher.add_watch_directory(target)
+
+    return {
+        "status": "success",
+        "indexed_path": str(target),
+        "watched": True,
+        "stats": stats
+    }
+
+
+@app.get("/api/watched-folders")
+def api_get_watched_folders():
+    """Retrieve all folders that are persistently registered and actively monitored."""
+    watcher = FileWatcher.get_instance(crawler=crawler)
+    active_paths = set(watcher.get_watched_paths())
+    saved_folders = db.get_watched_folders()
+
+    result = []
+    for f_str in saved_folders:
+        is_active = False
+        # A folder is active if it or any of its parents is in active_paths
+        for act in active_paths:
+            if f_str == act or f_str.startswith(act.rstrip("/") + "/"):
+                is_active = True
+                break
+        result.append({
+            "path": f_str,
+            "active": is_active
+        })
+
+    return {
+        "watched_folders": result,
+        "active_roots": sorted(list(active_paths))
+    }
+
+
+@app.delete("/api/watched-folders")
+def api_remove_watched_folder(path: str = Query(...)):
+    """Remove a folder from persistent watch list and active watchdog observer."""
+    target = Path(path).expanduser().resolve()
+    p_str = str(target)
+    watcher = FileWatcher.get_instance(crawler=crawler)
+    watcher.remove_watch_directory(p_str)
+    removed = db.remove_watched_folder(p_str)
+    return {"status": "success" if removed else "not_found", "removed_path": p_str}

@@ -4,7 +4,7 @@ import time
 import logging
 import threading
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple, Union
+from typing import Optional, Dict, List, Tuple, Union, Set, Any
 
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
@@ -46,7 +46,8 @@ class DebouncedIndexHandler(FileSystemEventHandler):
 
     def _schedule(self, path: str, event_type: str):
         p = Path(path)
-        if not self.crawler.is_safe_and_supported(p) and event_type != "deleted":
+        check_exists = (event_type != "deleted")
+        if not self.crawler.is_safe_and_supported(p, check_exists=check_exists):
             return
         with self._lock:
             self._pending_events[path] = (event_type, time.time())
@@ -78,7 +79,6 @@ class DebouncedIndexHandler(FileSystemEventHandler):
                     pass
                 self.crawler.remove_file(resolved_str, save_vector_store=True)
             else:
-
                 logger.info(f"[WATCHER] File changed/created: {p.name}")
                 success = self.crawler.index_file(p, save_vector_store=True, update_term_stats=True)
                 if success:
@@ -92,37 +92,114 @@ class DebouncedIndexHandler(FileSystemEventHandler):
             self._worker_thread.join(timeout=2.0)
 
 
+# Global active watcher instance
+active_watcher: Optional['FileWatcher'] = None
+
+
 class FileWatcher:
+    _instance: Optional['FileWatcher'] = None
+    _inst_lock = threading.Lock()
+
+    @classmethod
+    def get_instance(cls, crawler: Optional[Crawler] = None) -> 'FileWatcher':
+        """Thread-safe singleton accessor for FileWatcher."""
+        with cls._inst_lock:
+            if cls._instance is None:
+                cls._instance = cls(crawler=crawler)
+            return cls._instance
+
     def __init__(self, crawler: Optional[Crawler] = None):
+        global active_watcher
         self.crawler = crawler or Crawler()
         self.observer = Observer()
         self.handler = DebouncedIndexHandler(self.crawler)
+        self.watches: Dict[str, Any] = {}
+        self.watched_paths: Set[str] = set()
+        self._lock = threading.Lock()
+        active_watcher = self
+        FileWatcher._instance = self
 
-    def watch(self, target_dirs: Union[Path, str, List[Union[Path, str]]]):
-        """Starts watching one or more target directories recursively."""
-        from typing import Union as _Union
-        if isinstance(target_dirs, (str, Path)):
-            if isinstance(target_dirs, str) and "," in target_dirs:
-                dirs = [Path(p.strip()) for p in target_dirs.split(",") if p.strip()]
+    def add_watch_directory(self, target_dir: Union[Path, str]) -> bool:
+        """Dynamically adds a new directory to the active watchdog observer with parent-child deduplication."""
+        p = Path(target_dir).expanduser().resolve()
+        if not p.exists() or not p.is_dir():
+            logger.warning(f"Cannot watch non-existent directory: {p}")
+            return False
+
+        p_str = str(p)
+        with self._lock:
+            # 1. Check if this directory is already covered by an existing watched parent root
+            for watched in self.watched_paths:
+                if p_str == watched or p_str.startswith(watched.rstrip("/") + "/"):
+                    logger.info(f"Directory {p} is already covered by watched root {watched}")
+                    return True
+
+            # 2. Check if this new directory is a PARENT of any already-watched subdirectories.
+            # If so, unschedule redundant child watches because recursive watch on parent covers them.
+            children_to_remove = [
+                w for w in list(self.watched_paths)
+                if w.startswith(p_str.rstrip("/") + "/")
+            ]
+            for child in children_to_remove:
+                if child in self.watches:
+                    try:
+                        self.observer.unschedule(self.watches[child])
+                        del self.watches[child]
+                    except Exception as e:
+                        logger.debug(f"Could not unschedule child watch {child}: {e}")
+                self.watched_paths.discard(child)
+                logger.info(f"Subsumed child watch '{child}' under parent '{p_str}'")
+
+            # 3. Schedule the new watch
+            try:
+                watch = self.observer.schedule(self.handler, p_str, recursive=True)
+                self.watches[p_str] = watch
+                self.watched_paths.add(p_str)
+                if not self.observer.is_alive():
+                    self.observer.start()
+                logger.info(f"Successfully added dynamic watch on: {p_str}")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to schedule watch on {p_str}: {e}")
+                return False
+
+    def remove_watch_directory(self, target_dir: Union[Path, str]) -> bool:
+        """Dynamically removes a directory from the active watchdog observer."""
+        p = Path(target_dir).expanduser().resolve()
+        p_str = str(p)
+        with self._lock:
+            if p_str in self.watches:
+                try:
+                    self.observer.unschedule(self.watches[p_str])
+                    del self.watches[p_str]
+                except Exception as e:
+                    logger.error(f"Error unscheduling watch for {p_str}: {e}")
+                self.watched_paths.discard(p_str)
+                logger.info(f"Removed watch on: {p_str}")
+                return True
+            return False
+
+    def get_watched_paths(self) -> List[str]:
+        """Returns sorted list of currently watched directories."""
+        with self._lock:
+            return sorted(list(self.watched_paths))
+
+    def watch(self, target_dirs: Optional[Union[Path, str, List[Union[Path, str]]]] = None):
+        """Starts watching one or more target directories recursively and blocks until interrupted."""
+        if target_dirs:
+            if isinstance(target_dirs, (str, Path)):
+                if isinstance(target_dirs, str) and "," in target_dirs:
+                    dirs = [Path(p.strip()) for p in target_dirs.split(",") if p.strip()]
+                else:
+                    dirs = [Path(target_dirs)]
             else:
-                dirs = [Path(target_dirs)]
-        else:
-            dirs = [Path(d) for d in target_dirs]
+                dirs = [Path(d) for d in target_dirs]
 
-        valid_count = 0
-        for d in dirs:
-            p = d.expanduser().resolve()
-            if p.exists() and p.is_dir():
-                logger.info(f"Starting file watcher on: {p}")
-                self.observer.schedule(self.handler, str(p), recursive=True)
-                valid_count += 1
-            else:
-                logger.warning(f"Directory {d} does not exist or is not a directory.")
+            for d in dirs:
+                self.add_watch_directory(d)
 
-        if valid_count == 0:
-            raise ValueError("No valid directories provided to watch.")
-
-        self.observer.start()
+        if not self.observer.is_alive():
+            self.observer.start()
 
         try:
             while self.observer.is_alive():
@@ -134,5 +211,7 @@ class FileWatcher:
 
     def stop(self):
         self.handler.stop()
-        self.observer.stop()
-        self.observer.join()
+        if self.observer.is_alive():
+            self.observer.stop()
+            self.observer.join()
+

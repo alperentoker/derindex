@@ -230,33 +230,31 @@ def cmd_serve(args):
 
 def cmd_daemon(args):
     """Run both Web UI and File Watcher concurrently in background service mode."""
-    import threading
     import uvicorn
+    from app.web.server import db as server_db
 
     port = args.port or config.WEB_PORT
     host = args.host or config.WEB_HOST
     watch_path = getattr(args, "watch", None)
 
-    watcher = None
     if watch_path:
         target = Path(watch_path).expanduser().resolve()
         if target.exists() and target.is_dir():
-            console.print(f"[bold cyan]Servis Modu: Dosya İzleyici Başlatıldı ->[/bold cyan] {target}")
-            from app.web.server import crawler as server_crawler
-            watcher = FileWatcher(crawler=server_crawler)
-            watcher_thread = threading.Thread(target=watcher.watch, args=(target,), daemon=True)
-            watcher_thread.start()
+            server_db.add_watched_folder(str(target))
+            console.print(f"[bold cyan]Servis Modu: İzleme klasörü kaydedildi ->[/bold cyan] {target}")
         else:
-            console.print(f"[yellow]Uyarı: İzlenecek klasör bulunamadı: {watch_path}. Yalnızca web sunucusu çalışacak.[/yellow]")
+            console.print(f"[yellow]Uyarı: Belirtilen izleme klasörü bulunamadı: {watch_path}[/yellow]")
 
+    persisted = server_db.get_watched_folders()
+    if persisted:
+        console.print(f"[bold cyan]Servis Modu: {len(persisted)} kayıtlı klasör arka planda otomatik izlenecek:[/bold cyan]")
+        for f in persisted:
+            console.print(f"  [dim]-> {f}[/dim]")
+    else:
+        console.print("[dim]Servis Modu: Henüz kayıtlı izleme klasörü yok. Web arayüzünden ekleyebilirsiniz.[/dim]")
 
     console.print(f"[bold green]Servis Modu: Web Arayüzü Başlatılıyor ->[/bold green] http://localhost:{port}")
-    try:
-        uvicorn.run("app.web.server:app", host=host, port=port, reload=False, log_level="info")
-    finally:
-        if watcher:
-            console.print("[dim]İzleyici durduruluyor...[/dim]")
-            watcher.stop()
+    uvicorn.run("app.web.server:app", host=host, port=port, reload=False, log_level="info")
 
 
 def main():
