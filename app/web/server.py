@@ -43,7 +43,7 @@ class IndexRequest(BaseModel):
     path: str
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def serve_index():
     index_file = STATIC_DIR / "index.html"
     if not index_file.exists():
