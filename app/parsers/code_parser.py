@@ -360,24 +360,26 @@ class CodeParser(BaseParser):
                     continue
 
                 cell_lines = src.count("\n") + 1
+                cell_symbols: List[CodeSymbol] = []
 
                 # If code cell, extract python definitions
                 if cell_type == "code":
                     for sub_idx, line in enumerate(src.splitlines(), start=line_cursor):
                         fn_match = re.match(r'^\s*def\s+([A-Za-z0-9_]+)\s*\(', line)
                         if fn_match:
-                            symbols.append(CodeSymbol(name=fn_match.group(1), kind="function", line_number=sub_idx))
+                            cell_symbols.append(CodeSymbol(name=fn_match.group(1), kind="function", line_number=sub_idx))
                         cls_match = re.match(r'^\s*class\s+([A-Za-z0-9_]+)', line)
                         if cls_match:
-                            symbols.append(CodeSymbol(name=cls_match.group(1), kind="class", line_number=sub_idx))
+                            cell_symbols.append(CodeSymbol(name=cls_match.group(1), kind="class", line_number=sub_idx))
 
+                symbols.extend(cell_symbols)
                 chunks.append(ParsedChunk(
                     text=src,
                     section_title=f"Cell {cell_idx} ({cell_type})",
                     code_type="python" if cell_type == "code" else None,
                     start_line=line_cursor,
                     end_line=line_cursor + cell_lines - 1,
-                    symbols=symbols
+                    symbols=list(cell_symbols)  # Copy to prevent cross-cell leakage
                 ))
                 line_cursor += cell_lines
 

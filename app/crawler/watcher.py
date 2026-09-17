@@ -71,13 +71,17 @@ class DebouncedIndexHandler(FileSystemEventHandler):
         try:
             if ev_type == "deleted" or not p.exists():
                 logger.info(f"[WATCHER] File deleted: {p.name}")
-                self.crawler.remove_file(str(p.resolve()))
-                self.crawler.db.update_term_stats()
+                resolved_str = str(p.absolute())
+                try:
+                    resolved_str = str(p.resolve())
+                except Exception:
+                    pass
+                self.crawler.remove_file(resolved_str, save_vector_store=True)
             else:
+
                 logger.info(f"[WATCHER] File changed/created: {p.name}")
-                success = self.crawler.index_file(p)
+                success = self.crawler.index_file(p, save_vector_store=True, update_term_stats=True)
                 if success:
-                    self.crawler.db.update_term_stats()
                     logger.info(f"[WATCHER] Successfully updated index for {p.name}")
         except Exception as e:
             logger.error(f"[WATCHER] Error processing file {path}: {e}")

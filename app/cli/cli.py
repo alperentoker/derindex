@@ -242,11 +242,13 @@ def cmd_daemon(args):
         target = Path(watch_path).expanduser().resolve()
         if target.exists() and target.is_dir():
             console.print(f"[bold cyan]Servis Modu: Dosya İzleyici Başlatıldı ->[/bold cyan] {target}")
-            watcher = FileWatcher()
+            from app.web.server import crawler as server_crawler
+            watcher = FileWatcher(crawler=server_crawler)
             watcher_thread = threading.Thread(target=watcher.watch, args=(target,), daemon=True)
             watcher_thread.start()
         else:
             console.print(f"[yellow]Uyarı: İzlenecek klasör bulunamadı: {watch_path}. Yalnızca web sunucusu çalışacak.[/yellow]")
+
 
     console.print(f"[bold green]Servis Modu: Web Arayüzü Başlatılıyor ->[/bold green] http://localhost:{port}")
     try:

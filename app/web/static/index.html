@@ -13,7 +13,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="48x48" href="/static/favicon-48x48.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
   <div class="app-container">
@@ -81,6 +81,20 @@
               </button>
             </div>
 
+            <!-- Quick Filter Syntax Chips (Modern Pills) -->
+            <div class="search-chips-row" id="search-chips-row">
+              <span class="chips-label">Filtre:</span>
+              <button type="button" class="syntax-chip" data-filter="ext:pdf" onclick="toggleSearchFilter('ext:pdf')">📄 ext:pdf</button>
+              <button type="button" class="syntax-chip" data-filter="ext:py" onclick="toggleSearchFilter('ext:py')">🐍 ext:py</button>
+              <button type="button" class="syntax-chip" data-filter="type:code" onclick="toggleSearchFilter('type:code')">💻 type:code</button>
+              <button type="button" class="syntax-chip" data-filter="type:doc" onclick="toggleSearchFilter('type:doc')">📝 type:doc</button>
+              <button type="button" class="syntax-chip" data-filter="path:src/" onclick="toggleSearchFilter('path:src/')">📁 path:src/</button>
+              <button type="button" class="syntax-chip" data-filter="symbol:" onclick="toggleSearchFilter('symbol:...')">⚡ symbol:...</button>
+              <button type="button" class="syntax-chip" data-filter="after:2026-01-01" onclick="toggleSearchFilter('after:2026-01-01')">📅 after:2026-01-01</button>
+            </div>
+
+
+
             <!-- Search Controls & Tuners -->
             <div class="search-controls">
               <div class="control-group">
@@ -127,10 +141,14 @@
 
         <!-- Search Results Stream -->
         <div class="results-container">
-          <div class="results-header" id="results-header" style="display: none;">
-            <div class="results-count" id="results-count">0 sonuç bulundu</div>
-            <div class="results-meta" id="results-meta"></div>
+          <div class="results-header" id="results-header" style="display: none; flex-direction: column; align-items: flex-start; gap: 6px;">
+            <div style="display: flex; justify-content: space-between; width: 100%; align-items: center; flex-wrap: wrap; gap: 8px;">
+              <div class="results-count" id="results-count">0 sonuç bulundu</div>
+              <div class="results-meta" id="results-meta"></div>
+            </div>
+            <div class="active-filters-bar" id="active-filters-bar" style="display: none;"></div>
           </div>
+
 
           <div id="results-loading" class="loading-state" style="display: none;">
             <div class="spinner"></div>
@@ -250,6 +268,7 @@
     </main>
   </div>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2"></script>
 </body>
 </html>
+

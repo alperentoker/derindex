@@ -9,7 +9,7 @@ from datetime import datetime
 
 from config import config
 from app.database.db import Database
-from app.database.models import DocumentRecord, ChunkRecord, SymbolRecord
+from app.database.models import DocumentRecord, ChunkRecord, SymbolRecord, InvertedIndexRecord
 from app.parsers import get_parser_for_file
 from app.indexing.inverted_index import InvertedIndex
 from app.embeddings.embedder import LocalEmbedder
@@ -123,7 +123,8 @@ class Crawler:
 
             # File is new or modified
             try:
-                success = self.index_file(f_path, sha256_hash=current_sha)
+                # Use batch mode during directory scanning (save_vector_store=False, update_term_stats=False)
+                success = self.index_file(f_path, sha256_hash=current_sha, save_vector_store=False, update_term_stats=False)
                 if success:
                     stats["indexed"] += 1
                     if progress_callback:
@@ -138,14 +139,21 @@ class Crawler:
         for tracked_p in tracked_paths:
             if tracked_p not in current_candidate_paths:
                 if not Path(tracked_p).exists():
-                    self.remove_file(tracked_p)
+                    self.remove_file(tracked_p, save_vector_store=False)
                     stats["deleted"] += 1
 
-        # Recalculate corpus-level term stats after batch indexing
+        # Persist vectors and recalculate corpus-level stats once at end of batch scan
+        self.vector_store.save()
         self.db.update_term_stats()
         return stats
 
-    def index_file(self, file_path: Path, sha256_hash: Optional[str] = None) -> bool:
+    def index_file(
+        self,
+        file_path: Path,
+        sha256_hash: Optional[str] = None,
+        save_vector_store: bool = True,
+        update_term_stats: bool = True
+    ) -> bool:
         """
         Parses, chunks, indexes, and computes embeddings for a single file.
         Updates inverted index and vector store.
@@ -166,6 +174,11 @@ class Crawler:
         # 1. Parse document
         parsed_doc = parser.parse(file_path)
         if not parsed_doc.chunks:
+            # Fallback to universal parser if primary parser returned empty chunks (e.g. encrypted or image PDF)
+            from app.parsers import _UNIVERSAL_FALLBACK
+            if parser != _UNIVERSAL_FALLBACK:
+                parsed_doc = _UNIVERSAL_FALLBACK.parse(file_path)
+        if not parsed_doc.chunks:
             logger.debug(f"No content chunks extracted from {file_path.name}")
             return False
 
@@ -177,7 +190,7 @@ class Crawler:
                 cursor = conn.cursor()
                 cursor.execute("SELECT id FROM chunks WHERE doc_id = ?", (old_doc.id,))
                 old_chunk_ids = {row[0] for row in cursor.fetchall()}
-            self.vector_store.delete_vectors(old_chunk_ids)
+            self.vector_store.delete_vectors(old_chunk_ids, save_to_disk=save_vector_store)
             self.db.delete_document(old_doc.id)
 
         # 3. Insert Document Record
@@ -189,19 +202,20 @@ class Crawler:
             sha256=sha,
             size_bytes=stat.st_size,
             mtime=stat.st_mtime,
-            indexed_at=datetime.utcnow().isoformat()
+            indexed_at=datetime.now().isoformat()
         )
-        doc_id = self.db.insert_document(doc_record)
 
-        # 4. Prepare & Insert Chunks
+        # 4. Prepare Chunks, Symbols, and Postings for atomic insertion
         chunk_records: List[ChunkRecord] = []
         chunk_texts: List[str] = []
+        chunk_symbols: List[List[SymbolRecord]] = []
+        chunk_postings: List[List[InvertedIndexRecord]] = []
 
         for idx, pc in enumerate(parsed_doc.chunks):
             t_count = self.inverted_index.tokenizer.tokenize(pc.text)
             chunk_rec = ChunkRecord(
                 id=None,
-                doc_id=doc_id,
+                doc_id=0,
                 chunk_index=idx,
                 text=pc.text,
                 page_number=pc.page_number,
@@ -215,43 +229,47 @@ class Crawler:
             chunk_records.append(chunk_rec)
             chunk_texts.append(pc.text)
 
-        chunk_ids = self.db.insert_chunks(chunk_records)
-
-        # 5. Insert Symbols (mapped to chunks)
-        all_symbols: List[SymbolRecord] = []
-        for idx, pc in enumerate(parsed_doc.chunks):
-            cid = chunk_ids[idx]
-            for sym in pc.symbols:
-                all_symbols.append(SymbolRecord(
+            sym_list = [
+                SymbolRecord(
                     id=None,
-                    doc_id=doc_id,
-                    chunk_id=cid,
+                    doc_id=0,
+                    chunk_id=0,
                     name=sym.name,
                     kind=sym.kind,
                     line_number=sym.line_number
-                ))
-        self.db.insert_symbols(all_symbols)
+                )
+                for sym in pc.symbols
+            ]
+            chunk_symbols.append(sym_list)
 
-        # 6. Build & Insert Inverted Index Postings
-        all_postings = []
-        for idx, pc in enumerate(parsed_doc.chunks):
-            cid = chunk_ids[idx]
-            postings = self.inverted_index.index_chunk(doc_id=doc_id, chunk_id=cid, text=pc.text)
-            all_postings.extend(postings)
+            postings = self.inverted_index.index_chunk(doc_id=0, chunk_id=0, text=pc.text)
+            chunk_postings.append(postings)
 
-        self.db.insert_postings(all_postings)
+        # BUG-02 fix: Atomic transaction for document, chunks, symbols, and postings
+        doc_id, chunk_ids = self.db.save_indexed_document_atomic(
+            doc=doc_record,
+            chunks=chunk_records,
+            chunk_symbols=chunk_symbols,
+            chunk_postings=chunk_postings
+        )
 
-        # 7. Compute & Save Embeddings
+        # 5. Incremental Term Stats update (only for terms in this document)
+        if update_term_stats:
+            all_terms = [p.term for plist in chunk_postings for p in plist]
+            if all_terms:
+                self.db.update_term_stats_for_terms(all_terms)
+
+        # 6. Compute & Save Embeddings
         try:
             vectors = self.embedder.embed_texts(chunk_texts)
             if len(vectors) == len(chunk_ids):
-                self.vector_store.add_vectors(chunk_ids, vectors)
+                self.vector_store.add_vectors(chunk_ids, vectors, save_to_disk=save_vector_store)
         except Exception as e:
             logger.warning(f"Failed to generate embeddings for {file_path.name}: {e}")
 
         return True
 
-    def remove_file(self, file_path_str: str) -> None:
+    def remove_file(self, file_path_str: str, save_vector_store: bool = True) -> None:
         """Removes a deleted file from DB, cascades inverted index, and updates vector store."""
         doc = self.db.get_document_by_path(file_path_str)
         if not doc or doc.id is None:
@@ -263,7 +281,7 @@ class Crawler:
             cursor.execute("SELECT id FROM chunks WHERE doc_id = ?", (doc.id,))
             chunk_ids = {row[0] for row in cursor.fetchall()}
 
-        self.vector_store.delete_vectors(chunk_ids)
+        self.vector_store.delete_vectors(chunk_ids, save_to_disk=save_vector_store)
         self.db.delete_document(doc.id)
         logger.info(f"Removed file from index: {file_path_str}")
 

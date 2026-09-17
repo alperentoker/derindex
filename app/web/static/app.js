@@ -4,13 +4,32 @@ let currentPage = 1;
 let totalPages = 1;
 let totalResults = 0;
 let currentLimit = 25;
+let _searchController = null;  // AbortController for cancelling in-flight searches
+let _searchDebounceTimer = null; // Debounce timer for live typing search
 
 document.addEventListener('DOMContentLoaded', () => {
   loadSystemStats();
 
   const searchInput = document.getElementById('search-input');
+
+  // Debounced live search while user types (280ms)
+  searchInput.addEventListener('input', () => {
+    updateChipsActiveState();
+    clearTimeout(_searchDebounceTimer);
+    const query = searchInput.value.trim();
+    if (!query) {
+      clearSearchInput();
+      return;
+    }
+    _searchDebounceTimer = setTimeout(() => {
+      performSearch(1);
+    }, 280);
+  });
+
+
   searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
+      clearTimeout(_searchDebounceTimer);
       performSearch(1);
     }
   });
@@ -86,6 +105,13 @@ function setSearchMode(mode) {
 function onAlphaChange(val) {
   currentAlpha = parseFloat(val);
   document.getElementById('alpha-val-badge').textContent = currentAlpha.toFixed(2);
+  const query = document.getElementById('search-input').value.trim();
+  if (query) {
+    clearTimeout(_searchDebounceTimer);
+    _searchDebounceTimer = setTimeout(() => {
+      performSearch(1);
+    }, 150);
+  }
 }
 
 function onLimitChange() {
@@ -147,6 +173,10 @@ async function performSearch(targetPage = 1) {
   list.innerHTML = '';
 
   try {
+    // Cancel any in-flight search request
+    if (_searchController) _searchController.abort();
+    _searchController = new AbortController();
+
     const params = new URLSearchParams({
       q: query,
       alpha: currentAlpha.toString(),
@@ -155,7 +185,7 @@ async function performSearch(targetPage = 1) {
       code_only: codeOnly.toString()
     });
 
-    const res = await fetch(`/api/search?${params}`);
+    const res = await fetch(`/api/search?${params}`, { signal: _searchController.signal });
     const data = await res.json();
 
     loading.style.display = 'none';
@@ -176,17 +206,21 @@ async function performSearch(targetPage = 1) {
 
     document.getElementById('results-meta').textContent = `Sayfa ${currentPage} / ${totalPages} | Mod: ${currentMode.toUpperCase()} | Alpha: ${currentAlpha.toFixed(2)}`;
 
+    // Render active syntax filters bar
+    renderActiveFilters(data.filters);
+
     if (!data.results || data.results.length === 0) {
       empty.style.display = 'block';
       empty.querySelector('h3').textContent = `'${query}' için sonuç bulunamadı`;
-      empty.querySelector('p').textContent = `Farklı anahtar kelimeler deneyin veya alfa ağırlığını değiştirin.`;
+      empty.querySelector('p').textContent = `Farklı anahtar kelimeler veya filtreler deneyin.`;
       if (paginationBar) paginationBar.style.display = 'none';
       return;
     }
 
-    renderSearchResults(data.results, query);
+    renderSearchResults(data.results, data.clean_query || query);
     renderPagination();
   } catch (err) {
+    if (err.name === 'AbortError') return;  // Cancelled by newer search, ignore
     loading.style.display = 'none';
     empty.style.display = 'block';
     empty.querySelector('h3').textContent = 'Arama sırasında bir hata oluştu';
@@ -194,6 +228,146 @@ async function performSearch(targetPage = 1) {
     if (paginationBar) paginationBar.style.display = 'none';
   }
 }
+
+function toggleSearchFilter(filterToken) {
+  const input = document.getElementById('search-input');
+  let currentVal = input.value.trim();
+
+  // If token is already present, toggle off (remove it)
+  if (currentVal.includes(filterToken)) {
+    const escaped = escapeRegExp(filterToken);
+    currentVal = currentVal.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), '').replace(/\s+/g, ' ').trim();
+    input.value = currentVal;
+  } else {
+    // If it's a prefix like "symbol:..." prompt or set
+    if (filterToken === 'symbol:...') {
+      filterToken = 'symbol:';
+    }
+    input.value = currentVal ? `${currentVal} ${filterToken}` : filterToken;
+  }
+
+  updateChipsActiveState();
+  input.focus();
+  performSearch(1);
+}
+
+function updateChipsActiveState() {
+  const input = document.getElementById('search-input');
+  const val = (input ? input.value : '').toLowerCase();
+
+  document.querySelectorAll('.syntax-chip').forEach(chip => {
+    const filter = chip.getAttribute('data-filter')?.toLowerCase();
+    if (filter && val.includes(filter)) {
+      chip.classList.add('active');
+    } else {
+      chip.classList.remove('active');
+    }
+  });
+}
+
+function removeActiveFilter(filterToken) {
+  const input = document.getElementById('search-input');
+  let currentVal = input.value;
+  const escaped = escapeRegExp(filterToken);
+  currentVal = currentVal.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), '').replace(/\s+/g, ' ').trim();
+  input.value = currentVal;
+  updateChipsActiveState();
+  performSearch(1);
+}
+
+function renderActiveFilters(filters) {
+  const bar = document.getElementById('active-filters-bar');
+  if (!bar) return;
+
+  updateChipsActiveState();
+
+  if (!filters) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    return;
+  }
+
+  const badges = [];
+  if (filters.extensions && filters.extensions.length > 0) {
+    filters.extensions.forEach(ext => {
+      const token = `ext:${ext.replace(/^\./, '')}`;
+      badges.push(`
+        <span class="active-filter-badge">
+          <span>📄 ext:${escapeHtml(ext)}</span>
+          <span class="filter-remove" onclick="removeActiveFilter('${token}')" title="Filtreyi kaldır">✕</span>
+        </span>
+      `);
+    });
+  }
+  if (filters.exclude_extensions && filters.exclude_extensions.length > 0) {
+    filters.exclude_extensions.forEach(ext => {
+      const token = `-ext:${ext.replace(/^\./, '')}`;
+      badges.push(`
+        <span class="active-filter-badge">
+          <span>🚫 -ext:${escapeHtml(ext)}</span>
+          <span class="filter-remove" onclick="removeActiveFilter('${token}')" title="Filtreyi kaldır">✕</span>
+        </span>
+      `);
+    });
+  }
+  if (filters.type) {
+    const token = `type:${filters.type}`;
+    badges.push(`
+      <span class="active-filter-badge">
+        <span>🏷️ type:${escapeHtml(filters.type)}</span>
+        <span class="filter-remove" onclick="removeActiveFilter('${token}')" title="Filtreyi kaldır">✕</span>
+      </span>
+    `);
+  }
+  if (filters.path) {
+    const token = `path:${filters.path}`;
+    badges.push(`
+      <span class="active-filter-badge">
+        <span>📁 path:${escapeHtml(filters.path)}</span>
+        <span class="filter-remove" onclick="removeActiveFilter('${token}')" title="Filtreyi kaldır">✕</span>
+      </span>
+    `);
+  }
+  if (filters.symbol) {
+    const token = `symbol:${filters.symbol}`;
+    badges.push(`
+      <span class="active-filter-badge">
+        <span>⚡ symbol:${escapeHtml(filters.symbol)}</span>
+        <span class="filter-remove" onclick="removeActiveFilter('${token}')" title="Filtreyi kaldır">✕</span>
+      </span>
+    `);
+  }
+  if (filters.after) {
+    const d = new Date(filters.after * 1000).toISOString().split('T')[0];
+    const token = `after:${d}`;
+    badges.push(`
+      <span class="active-filter-badge">
+        <span>📅 after:${d}</span>
+        <span class="filter-remove" onclick="removeActiveFilter('${token}')" title="Filtreyi kaldır">✕</span>
+      </span>
+    `);
+  }
+  if (filters.before) {
+    const d = new Date(filters.before * 1000).toISOString().split('T')[0];
+    const token = `before:${d}`;
+    badges.push(`
+      <span class="active-filter-badge">
+        <span>📅 before:${d}</span>
+        <span class="filter-remove" onclick="removeActiveFilter('${token}')" title="Filtreyi kaldır">✕</span>
+      </span>
+    `);
+  }
+
+  if (badges.length > 0) {
+    bar.style.display = 'flex';
+    bar.innerHTML = `<span class="chips-label" style="font-size:0.7rem;">Aktif:</span>` + badges.join('');
+  } else {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+  }
+}
+
+
 
 function renderPagination() {
   const paginationBar = document.getElementById('pagination-bar');
@@ -286,6 +460,13 @@ function renderSearchResults(results, query) {
     if (item.symbol_name) {
       badgesHtml.push(`<span class="badge symbol">Sembol: ${escapeHtml(item.symbol_name)}</span>`);
     }
+
+    if (item.recency_boost && item.recency_boost >= 0.08) {
+      badgesHtml.push(`<span class="recency-badge">⚡ Son 7 Gün (+${item.recency_boost.toFixed(2)})</span>`);
+    } else if (item.recency_boost && item.recency_boost > 0) {
+      badgesHtml.push(`<span class="recency-badge">🕒 Son 30 Gün (+${item.recency_boost.toFixed(2)})</span>`);
+    }
+
 
     card.innerHTML = `
       <div class="result-header">

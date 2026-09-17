@@ -65,6 +65,9 @@ class SearchResult:
     end_line: Optional[int] = None
     bm25_score: float = 0.0
     semantic_score: float = 0.0
+    raw_score: Optional[float] = None
+    recency_boost: float = 0.0
+    mtime: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -75,6 +78,8 @@ class SearchResult:
             "score": round(self.score, 4),
             "bm25_score": round(self.bm25_score, 4),
             "semantic_score": round(self.semantic_score, 4),
+            "recency_boost": round(self.recency_boost, 4),
+            "mtime": self.mtime,
             "matched_snippet": self.matched_snippet,
             "page_number": self.page_number,
             "section": self.section,
@@ -83,3 +88,4 @@ class SearchResult:
             "start_line": self.start_line,
             "end_line": self.end_line,
         }
+

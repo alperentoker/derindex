@@ -11,8 +11,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import config
 from app.database.db import Database
+from app.embeddings.vector_store import VectorStore
+from app.embeddings.embedder import LocalEmbedder
 from app.search.hybrid_search import HybridSearcher
+from app.search.query_parser import QueryParser
 from app.crawler.crawler import Crawler
+
 
 app = FastAPI(
     title="Derindex API",
@@ -23,15 +27,18 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Shared singletons
+# Shared singletons to prevent memory de-synchronization
 db = Database()
-searcher = HybridSearcher(db=db)
-crawler = Crawler(db=db)
+vector_store = VectorStore()
+embedder = LocalEmbedder.get_instance()
+searcher = HybridSearcher(db=db, vector_store=vector_store, embedder=embedder)
+crawler = Crawler(db=db, vector_store=vector_store, embedder=embedder)
+
 
 # Static files directory
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -67,7 +74,8 @@ def api_search(
     limit: int = Query(15, ge=1, le=100),
     code_only: bool = Query(False)
 ):
-    """Hybrid search endpoint with pagination."""
+    """Hybrid search endpoint with syntax parsing and pagination."""
+    parsed = QueryParser.parse(q)
     results, total_count = searcher.search_paginated(
         query=q,
         page=page,
@@ -75,9 +83,19 @@ def api_search(
         alpha=alpha,
         code_only=code_only
     )
-    total_pages = max(1, (total_count + limit - 1) // limit) if total_count > 0 else 1
+    total_pages = (total_count + limit - 1) // limit if total_count > 0 else 0
     return {
         "query": q,
+        "clean_query": parsed.clean_query,
+        "filters": {
+            "extensions": sorted(list(parsed.extensions)),
+            "exclude_extensions": sorted(list(parsed.exclude_extensions)),
+            "path": parsed.path_pattern,
+            "type": parsed.file_type,
+            "after": parsed.after_timestamp,
+            "before": parsed.before_timestamp,
+            "symbol": parsed.symbol_filter
+        } if parsed.has_filters else None,
         "alpha": alpha,
         "page": page,
         "limit": limit,
@@ -86,6 +104,7 @@ def api_search(
         "count": len(results),
         "results": [r.to_dict() for r in results]
     }
+
 
 
 @app.get("/api/code")

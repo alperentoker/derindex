@@ -123,12 +123,34 @@ class ImageParser(BaseParser):
                         info_lines.append(f"Sanatçı: {exif_dict['Artist']}")
         except Exception as e:
             logger.debug(f"Pillow EXIF extraction skipped for {file_path.name}: {e}")
-            info_lines.append(f"Format: {file_path.suffix.upper().lstrip('.')}")
-
         full_content = "\n".join(info_lines)
+
+        # Attempt local OCR if available
+        ocr_text = self._try_extract_ocr(file_path)
+        if ocr_text:
+            metadata["has_ocr"] = True
+            full_content += f"\n\nGörsel İçi Okunan Metin (OCR):\n{ocr_text}"
+
         return [ParsedChunk(
             text=full_content,
             section_title=file_path.name,
             start_line=1,
-            end_line=len(info_lines)
+            end_line=len(info_lines) + (ocr_text.count("\n") + 2 if ocr_text else 0)
         )]
+
+    @staticmethod
+    def _try_extract_ocr(file_path: Path) -> Optional[str]:
+        """Attempts OCR text extraction using pytesseract if installed, otherwise gracefully returns None."""
+        try:
+            import pytesseract
+            from PIL import Image
+            with Image.open(file_path) as img:
+                if max(img.size) > 2000:
+                    img.thumbnail((2000, 2000))
+                text = pytesseract.image_to_string(img, timeout=5)
+                text_clean = text.strip()
+                if len(text_clean) >= 10:
+                    return text_clean[:3000]
+        except Exception:
+            pass
+        return None

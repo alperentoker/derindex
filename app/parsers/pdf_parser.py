@@ -1,8 +1,7 @@
-"""PDF parser with page-level text extraction and page number preservation."""
-
+import io
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from pypdf import PdfReader
 from .base import BaseParser, ParsedDocument, ParsedChunk
 from .chunker import SmartChunker
@@ -33,6 +32,13 @@ class PDFParser(BaseParser):
                 try:
                     page_text = page.extract_text() or ""
                     page_text = page_text.strip()
+
+                    # Fallback to local OCR if page has almost no extracted text (scanned PDF)
+                    if len(page_text) < 30:
+                        ocr_text = self._try_extract_ocr_from_page(page)
+                        if ocr_text:
+                            page_text = f"{page_text}\n\n[OCR Sayfa Metni]:\n{ocr_text}".strip()
+
                     if not page_text:
                         continue
 
@@ -59,3 +65,31 @@ class PDFParser(BaseParser):
             symbols=[],
             metadata={"total_pages": total_pages}
         )
+
+    @staticmethod
+    def _try_extract_ocr_from_page(page) -> Optional[str]:
+        """Attempts OCR on embedded images of a scanned PDF page if pytesseract is available."""
+        try:
+            if not hasattr(page, "images") or not page.images:
+                return None
+            import pytesseract
+            from PIL import Image
+
+            ocr_results = []
+            for img_file in page.images:
+                try:
+                    with Image.open(io.BytesIO(img_file.data)) as img:
+                        if max(img.size) > 2000:
+                            img.thumbnail((2000, 2000))
+                        text = pytesseract.image_to_string(img, timeout=5).strip()
+                        if len(text) >= 15:
+                            ocr_results.append(text[:2000])
+                except Exception:
+                    continue
+
+            if ocr_results:
+                return "\n".join(ocr_results)[:4000]
+        except Exception:
+            pass
+        return None
+

@@ -41,7 +41,7 @@ class BM25Engine:
         if not query_terms:
             return []
 
-        total_chunks, avgdl, chunk_lengths = self.db.get_bm25_corpus_stats()
+        total_chunks, avgdl = self.db.get_bm25_corpus_summary()
         if total_chunks == 0 or avgdl == 0.0:
             return []
 
@@ -60,6 +60,13 @@ class BM25Engine:
                 prefix_dfs = self.db.get_term_doc_frequencies(prefix_terms)
                 for pt in prefix_terms:
                     doc_freqs[pt] = prefix_dfs.get(pt, 1)
+
+        if not raw_postings:
+            return []
+
+        # Only fetch chunk lengths for actual matching candidates — O(candidates) memory
+        matching_cids = list(set(int(p[2]) for p in raw_postings))
+        chunk_lengths = self.db.get_chunk_lengths(matching_cids)
 
         # Calculate IDF for each query term
         idfs: Dict[str, float] = {}

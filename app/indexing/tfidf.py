@@ -28,7 +28,7 @@ class TFIDFEngine:
         if not query_terms:
             return []
 
-        total_chunks, _, _ = self.db.get_bm25_corpus_stats()
+        total_chunks, _ = self.db.get_bm25_corpus_summary()
         if total_chunks == 0:
             return []
 

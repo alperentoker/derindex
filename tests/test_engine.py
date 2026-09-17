@@ -39,9 +39,15 @@ class TestTokenizer(unittest.TestCase):
         tokens = self.tokenizer.tokenize("MemoryManager allocate_memory_block")
         self.assertIn("memorymanager", tokens)
         self.assertIn("memory", tokens)
+        self.assertIn("manager", tokens)
         self.assertIn("allocate_memory_block", tokens)
         self.assertIn("allocate", tokens)
         self.assertIn("block", tokens)
+
+        # Test Turkish camelCase
+        tr_tokens = self.tokenizer.tokenize("İslemYoneticisi")
+        self.assertIn("islem", tr_tokens)
+        self.assertIn("yoneticisi", tr_tokens)
 
 
 class TestASTCodeParser(unittest.TestCase):
@@ -159,6 +165,104 @@ class TestDatabaseAndIR(unittest.TestCase):
         tfidf_scores = self.tfidf.score_query("python")
         self.assertTrue(len(tfidf_scores) > 0)
         self.assertEqual(tfidf_scores[0][0], c2_id)
+
+    def test_atomic_document_indexing(self):
+        from app.database.models import SymbolRecord
+        d = DocumentRecord(None, "/path/atomic_doc.py", "atomic_doc.py", ".py", "sha_atomic", 200, 1.0, "2026-01-01")
+        chunks = [
+            ChunkRecord(None, 0, 0, "def calculate(): return 42", token_count=5),
+            ChunkRecord(None, 0, 1, "class Engine: pass", token_count=4),
+        ]
+        chunk_symbols = [
+            [SymbolRecord(None, 0, 0, "calculate", "function", 1)],
+            [SymbolRecord(None, 0, 0, "Engine", "class", 2)]
+        ]
+        chunk_postings = [
+            [InvertedIndexRecord("calculate", 0, 0, 1)],
+            [InvertedIndexRecord("engine", 0, 0, 1)]
+        ]
+
+        doc_id, chunk_ids = self.db.save_indexed_document_atomic(d, chunks, chunk_symbols, chunk_postings)
+        self.assertIsNotNone(doc_id)
+        self.assertEqual(len(chunk_ids), 2)
+
+        # Verify symbols and postings exist
+        symbols = self.db.find_symbols("calculate")
+        self.assertEqual(len(symbols), 1)
+        self.assertEqual(symbols[0]["name"], "calculate")
+
+    def test_atomic_reindex_chunk_cleanup(self):
+        # When a file is modified and re-indexed, old chunks must not accumulate
+        from app.database.models import SymbolRecord
+        d = DocumentRecord(None, "/path/reindex_doc.py", "reindex_doc.py", ".py", "sha_v1", 100, 1.0, "2026-01-01")
+        chunks_v1 = [ChunkRecord(None, 0, 0, "old chunk content", token_count=3)]
+        doc_id, c_ids_v1 = self.db.save_indexed_document_atomic(d, chunks_v1, [[]], [[]])
+
+        # Re-index with new content
+        d.sha256 = "sha_v2"
+        chunks_v2 = [
+            ChunkRecord(None, 0, 0, "new chunk content 1", token_count=4),
+            ChunkRecord(None, 0, 1, "new chunk content 2", token_count=4)
+        ]
+        doc_id_2, c_ids_v2 = self.db.save_indexed_document_atomic(d, chunks_v2, [[], []], [[], []])
+
+        self.assertEqual(doc_id, doc_id_2)
+        # Verify exactly 2 chunks exist for this doc, not 1 + 2 = 3
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM chunks WHERE doc_id = ?", (doc_id,))
+            count = cursor.fetchone()[0]
+            self.assertEqual(count, 2)
+
+
+    def test_reranker_idempotence(self):
+        from app.search.reranker import Reranker
+        from app.database.models import SearchResult
+        reranker = Reranker()
+        results = [
+            SearchResult(chunk_id=1, doc_id=1, filename="main.py", path="/main.py", score=0.4, matched_snippet="main snippet", symbol_name="İslemYoneticisi")
+        ]
+        reranker.rerank(results, "islem")
+        first_score = results[0].score
+
+        # Calling rerank multiple times must not inflate score
+        reranker.rerank(results, "islem")
+        reranker.rerank(results, "islem")
+        self.assertEqual(results[0].score, first_score)
+
+    def test_optimized_bm25_stats_and_chunk_lengths(self):
+        # Insert a test doc with chunks
+        d = DocumentRecord(None, "/path/opt_doc.txt", "opt_doc.txt", ".txt", "sha_opt", 100, 1.0, "2026-01-01")
+        doc_id = self.db.insert_document(d)
+        c1 = ChunkRecord(None, doc_id, 0, "token count test one", token_count=4)
+        c2 = ChunkRecord(None, doc_id, 1, "token count test two extra", token_count=5)
+        c_ids = self.db.insert_chunks([c1, c2])
+
+        total_chunks, avgdl = self.db.get_bm25_corpus_summary()
+        self.assertGreaterEqual(total_chunks, 2)
+        self.assertGreater(avgdl, 0.0)
+
+        # Verify selective chunk length lookup
+        lengths = self.db.get_chunk_lengths([c_ids[0]])
+        self.assertEqual(len(lengths), 1)
+        self.assertEqual(lengths[c_ids[0]], 4)
+
+    def test_incremental_term_stats(self):
+        d = DocumentRecord(None, "/path/inc_doc.txt", "inc_doc.txt", ".txt", "sha_inc", 100, 1.0, "2026-01-01")
+        doc_id = self.db.insert_document(d)
+        c = ChunkRecord(None, doc_id, 0, "asynchronous concurrency", token_count=2)
+        c_id = self.db.insert_chunks([c])[0]
+        postings = [
+            InvertedIndexRecord("asynchronous", doc_id, c_id, 1),
+            InvertedIndexRecord("concurrency", doc_id, c_id, 1)
+        ]
+        self.db.insert_postings(postings)
+
+        # Update stats ONLY for these terms
+        self.db.update_term_stats_for_terms(["asynchronous", "concurrency"])
+        dfs = self.db.get_term_doc_frequencies(["asynchronous", "concurrency"])
+        self.assertEqual(dfs.get("asynchronous"), 1)
+        self.assertEqual(dfs.get("concurrency"), 1)
 
 
 class TestIncrementalHashing(unittest.TestCase):
@@ -378,6 +482,176 @@ Translation Lookaside Buffer erisim surelerini kisaltir.
         self.assertIn("animasyon", chunk_text.lower())
 
 
+class TestQueryParser(unittest.TestCase):
+    def test_syntax_operators_parsing(self):
+        from app.search.query_parser import QueryParser
+        raw = 'auth memory allocation ext:py,ts -ext:tmp path:"app/services" type:code after:2026-01-01 symbol:AuthHandler'
+        parsed = QueryParser.parse(raw)
+
+        self.assertEqual(parsed.clean_query, "auth memory allocation")
+        self.assertEqual(parsed.extensions, {".py", ".ts"})
+        self.assertEqual(parsed.exclude_extensions, {".tmp"})
+        self.assertEqual(parsed.path_pattern, "app/services")
+        self.assertEqual(parsed.file_type, "code")
+        self.assertEqual(parsed.symbol_filter, "AuthHandler")
+        self.assertIsNotNone(parsed.after_timestamp)
+
+    def test_multilingual_clean_query_preservation(self):
+        from app.search.query_parser import QueryParser
+        # Test English, Turkish, and camelCase together
+        raw = "İşlemHavuzu workerThreadPool ext:py"
+        parsed = QueryParser.parse(raw)
+        self.assertEqual(parsed.clean_query, "İşlemHavuzu workerThreadPool")
+        self.assertEqual(parsed.extensions, {".py"})
+
+    def test_matches_filters_logic(self):
+        from app.search.query_parser import QueryParser
+        raw = "ext:pdf path:docs/ after:2026-01-01"
+        parsed = QueryParser.parse(raw)
+
+        # Match case
+        self.assertTrue(QueryParser.matches_filters(
+            parsed_query=parsed,
+            doc_path="/home/user/docs/manual.pdf",
+            doc_extension=".pdf",
+            doc_mtime=1800000000.0
+        ))
+
+        # Extension mismatch
+        self.assertFalse(QueryParser.matches_filters(
+            parsed_query=parsed,
+            doc_path="/home/user/docs/manual.docx",
+            doc_extension=".docx",
+            doc_mtime=1800000000.0
+        ))
+
+        # Path mismatch
+        self.assertFalse(QueryParser.matches_filters(
+            parsed_query=parsed,
+            doc_path="/home/user/images/manual.pdf",
+            doc_extension=".pdf",
+            doc_mtime=1800000000.0
+        ))
+
+
+class TestVectorStoreScaling(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.store_path = Path(self.temp_dir.name) / "test_vectors.npz"
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_l2_normalization_on_add(self):
+        import numpy as np
+        from app.embeddings.vector_store import VectorStore
+
+        store = VectorStore(storage_path=self.store_path)
+        # Add unnormalized vectors
+        raw_vecs = np.array([[3.0, 4.0] + [0.0] * 382, [0.0, 5.0] + [0.0] * 382], dtype=np.float32)
+        chunk_ids = [101, 102]
+        store.add_vectors(chunk_ids, raw_vecs, save_to_disk=False)
+
+        # Confirm stored vectors have unit norm (approx 1.0)
+        norm_1 = np.linalg.norm(store.matrix[0])
+        norm_2 = np.linalg.norm(store.matrix[1])
+        self.assertAlmostEqual(float(norm_1), 1.0, places=5)
+        self.assertAlmostEqual(float(norm_2), 1.0, places=5)
+
+    def test_candidate_pre_filtering_search(self):
+        import numpy as np
+        from app.embeddings.vector_store import VectorStore
+
+        store = VectorStore(storage_path=self.store_path)
+        vecs = np.array([
+            [1.0, 0.0] + [0.0] * 382,
+            [0.0, 1.0] + [0.0] * 382,
+            [0.707, 0.707] + [0.0] * 382
+        ], dtype=np.float32)
+        store.add_vectors([1, 2, 3], vecs, save_to_disk=False)
+
+        query_vec = np.array([1.0, 0.0] + [0.0] * 382, dtype=np.float32)
+
+        # Search with candidate filter restricting to chunk 2 only
+        results = store.search(query_vec, top_k=5, candidate_ids={2})
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0][0], 2)
+
+
+class TestHybridSearchFiltersAndRecency(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        db_path = Path(self.temp_dir.name) / "test.db"
+        self.db = Database(db_path=db_path)
+        self.searcher = HybridSearcher(db=self.db)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_hybrid_search_filter_and_recency(self):
+        import time
+        now = time.time()
+
+        # Insert recent python document
+        doc_py = DocumentRecord(
+            id=None,
+            path="/project/src/cache.py",
+            filename="cache.py",
+            extension=".py",
+            sha256="sha_py",
+            size_bytes=500,
+            mtime=now - 3600,  # 1 hour ago (within 7 days)
+            indexed_at="2026-09-17"
+        )
+        pid = self.db.insert_document(doc_py)
+        c_py = ChunkRecord(
+            id=None,
+            doc_id=pid,
+            chunk_index=0,
+            text="class FastCache: def get(key): return key",
+            code_type="python",
+            symbol_name="FastCache"
+        )
+        c_py_id = self.db.insert_chunks([c_py])[0]
+
+        # Insert older docx document
+        doc_old = DocumentRecord(
+            id=None,
+            path="/project/docs/cache_spec.docx",
+            filename="cache_spec.docx",
+            extension=".docx",
+            sha256="sha_docx",
+            size_bytes=500,
+            mtime=now - (60 * 86400),  # 60 days ago
+            indexed_at="2026-09-17"
+        )
+        oid = self.db.insert_document(doc_old)
+        c_old = ChunkRecord(
+            id=None,
+            doc_id=oid,
+            chunk_index=0,
+            text="Cache specification and architecture overview",
+            code_type=None
+        )
+        c_old_id = self.db.insert_chunks([c_old])[0]
+
+        # Add BM25 term index
+        self.db.insert_postings([
+            InvertedIndexRecord(term="cache", doc_id=pid, chunk_id=c_py_id, term_freq=2),
+            InvertedIndexRecord(term="cache", doc_id=oid, chunk_id=c_old_id, term_freq=2)
+        ])
+        self.db.update_term_stats_for_terms({"cache"})
+
+
+        # Search with extension filter
+        res_filtered, count = self.searcher.search_paginated("cache ext:py")
+        self.assertEqual(count, 1)
+        self.assertEqual(res_filtered[0].filename, "cache.py")
+        # Check recency boost was applied
+        self.assertGreaterEqual(res_filtered[0].recency_boost, 0.08)
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

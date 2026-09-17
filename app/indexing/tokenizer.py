@@ -39,6 +39,19 @@ class Tokenizer:
         self.min_len = min_len
         self.stopwords = DEFAULT_STOPWORDS
 
+    @staticmethod
+    def _turkish_lower(text: str) -> str:
+        """Turkish-aware case folding: İ→i, I→ı, preserving standard lower for others."""
+        result = []
+        for ch in text:
+            if ch == 'İ':
+                result.append('i')
+            elif ch == 'I':
+                result.append('ı')
+            else:
+                result.append(ch.lower())
+        return ''.join(result)
+
     def tokenize(self, text: str, split_code_symbols: bool = True) -> List[str]:
         """
         Tokenizes text into normalized words, splitting camelCase and snake_case when applicable.
@@ -46,12 +59,22 @@ class Tokenizer:
         if not text:
             return []
 
+        tokens: List[str] = []
+
+        # If split_code_symbols is enabled, inspect original case before lowering
+        # to correctly capture camelCase boundaries (e.g. MemoryManager -> Memory, Manager)
+        if split_code_symbols:
+            camel_matches = re.findall(r'[A-ZĞÜŞİÖÇ]?[a-zğüşıöç0-9]+|[A-ZĞÜŞİÖÇ]+(?=[A-ZĞÜŞİÖÇ][a-zğüşıöç]|\b)', text)
+            for cw in camel_matches:
+                low_cw = self._turkish_lower(cw).strip("_")
+                if self._is_valid_token(low_cw):
+                    tokens.append(low_cw)
+
         # Turkish-aware lowercase normalization
-        normalized = text.replace("İ", "i").replace("I", "ı").lower()
+        normalized = self._turkish_lower(text)
 
         # Extract words and tokens using unicode alphanumeric pattern
         raw_tokens = re.findall(r'[a-z0-9_ğüşıöç]+', normalized)
-        tokens: List[str] = []
 
         for token in raw_tokens:
             token = token.strip("_")
@@ -69,16 +92,6 @@ class Tokenizer:
                                 tokens.append(part)
                         continue
 
-                # Check for camelCase transitions in original text
-                # (e.g. MemoryManager -> memory, manager)
-                sub_words = re.findall(r'[a-zğüşıöç]+|[0-9]+', token)
-                if len(sub_words) > 1 and "".join(sub_words) == token:
-                    tokens.append(token)
-                    for sw in sub_words:
-                        if self._is_valid_token(sw):
-                            tokens.append(sw)
-                    continue
-
             if self._is_valid_token(token):
                 tokens.append(token)
 
@@ -90,7 +103,8 @@ class Tokenizer:
                 if token and re.search(r'[a-z0-9ğüşıöç]', token):
                     tokens.append(token)
 
-        return tokens
+        # Preserve order while deduplicating
+        return list(dict.fromkeys(tokens))
 
     def _is_valid_token(self, token: str) -> bool:
         if len(token) < self.min_len:
