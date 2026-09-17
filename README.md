@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="assets/banner.jpeg" alt="Derindex Banner" width="100%">
+  <img src="assets/banner.png" alt="Derindex Banner" width="100%">
 </p>
 
 <p align="center">
-  <img src="assets/logo.jpeg" alt="Derindex Logo" width="80" height="80" style="border-radius: 8px;">
+  <img src="assets/logo.png" alt="Derindex Logo" width="80" height="80" style="border-radius: 8px;">
 </p>
 
 # Derindex: Derinlemesine Kişisel Arama Motoru ve Semantik Arama
@@ -23,7 +23,7 @@ Harici hiçbir bulut servisine, üçüncü parti API'lara veya harici sunuculara
 ## 🏗 Mimari Şema
 
 <p align="center">
-  <img src="assets/architecture.jpeg" alt="Derindex Teknik Mimari Şeması" width="100%" style="border-radius: 8px;">
+  <img src="assets/architecture.png" alt="Derindex Teknik Mimari Şeması" width="100%" style="border-radius: 8px;">
 </p>
 
 ```
@@ -102,7 +102,7 @@ Harici hiçbir bulut servisine, üçüncü parti API'lara veya harici sunuculara
    - Arka planda çalışırken yalnızca **~60 MB RAM** tüketir.
 
 <p align="center">
-  <img src="assets/privacy_concept.jpeg" alt="Sıfır Bulut Bağımlılığı ve Yerel Gizlilik" width="100%" style="border-radius: 8px;">
+  <img src="assets/privacy_concept.png" alt="Sıfır Bulut Bağımlılığı ve Yerel Gizlilik" width="100%" style="border-radius: 8px;">
 </p>
 
 ---
@@ -140,7 +140,7 @@ ln -sf $(pwd)/derindex ~/.local/bin/derindex
 ## 💻 CLI Kullanım Rehberi
 
 <p align="center">
-  <img src="assets/terminal_cli.jpeg" alt="Derindex CLI Terminal Arayüzü" width="100%" style="border-radius: 8px;">
+  <img src="assets/terminal_cli.png" alt="Derindex CLI Terminal Arayüzü" width="100%" style="border-radius: 8px;">
 </p>
 
 Terminalinizde herhangi bir klasördeyken doğrudan `derindex` komutunu kullanabilirsiniz:
